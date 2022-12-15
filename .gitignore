@@ -56,7 +56,7 @@ README.txt
 .cache/
 .kateproject*
 venvs
-venv
+.venv
 .idea
 
 # coverage.py output
