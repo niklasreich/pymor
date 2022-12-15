@@ -5,14 +5,19 @@
 
 import sys
 import time
+import pathlib
 
 from typer import Argument, Option, run
 
-from pymor.algorithms.error import plot_reduction_error_analysis, reduction_error_analysis
+s = str(pathlib.Path(__file__).parent.resolve())
+sys.path.append(s + '/../../src/')
+
+from pymor.algorithms.error import plot_reduction_error_analysis, reduction_error_analysis, plot_batch_reduction
 from pymor.core.pickle import dump
 from pymor.parallel.default import new_parallel_pool
 from pymor.tools.typer import Choices
 
+# python -m thermalblock 3 2 5 100 5 --alg batch_greedy --plot-batch-comparison
 
 def main(
     xblocks: int = Argument(..., help='Number of blocks in x direction.'),
@@ -25,11 +30,12 @@ def main(
              'adaptive_greedy: size of validation set.\n\n'
     ),
     rbsize: int = Argument(..., help='Size of the reduced basis.'),
+    batchsize: int = Argument(..., help='Size of the (parallel) batch in each greedy iteration.'),
 
     adaptive_greedy_gamma: float = Option(0.2, help='See pymor.algorithms.adaptivegreedy.'),
     adaptive_greedy_rho: float = Option(1.1, help='See pymor.algorithms.adaptivegreedy.'),
     adaptive_greedy_theta: float = Option(0., help='See pymor.algorithms.adaptivegreedy.'),
-    alg: Choices('naive greedy adaptive_greedy pod') = Option('greedy', help='The model reduction algorithm to use.'),
+    alg: Choices('naive greedy batch_greedy adaptive_greedy pod') = Option('greedy', help='The model reduction algorithm to use.'),
     cache_region: Choices('none memory disk persistent') = Option(
         'none',
         help='Name of cache region to use for caching solution snapshots.'
@@ -64,6 +70,7 @@ def main(
     plot_err: bool = Option(False, help='Plot error'),
     plot_error_sequence: bool = Option(False, help='Plot reduction error vs. basis size.'),
     plot_solutions: bool = Option(False, help='Plot some example solutions.'),
+    plot_batch_comparison: bool = Option(False, help='Plot some example solutions.'),
     reductor: Choices('traditional residual_basis') = Option(
         'residual_basis',
         help='Reductor (error estimator) to choose.'
@@ -134,6 +141,15 @@ def main(
                                          max_extensions=rbsize,
                                          use_error_estimator=greedy_with_error_estimator,
                                          pool=pool if parallel else None)
+    elif alg == 'batch_greedy':
+        parallel = greedy_with_error_estimator or not fenics  # cannot pickle FEniCS model
+        rom, red_summary, batch_greedy_data = reduce_batch_greedy(fom=fom, reductor=reductor, parameter_space=parameter_space,
+                                                    snapshots_per_block=snapshots,
+                                                    extension_alg_name=extension_alg.value,
+                                                    max_extensions=rbsize,
+                                                    use_error_estimator=greedy_with_error_estimator,
+                                                    pool=pool if parallel else None,
+                                                    batchsize=batchsize)
     elif alg == 'adaptive_greedy':
         parallel = greedy_with_error_estimator or not fenics  # cannot pickle FEniCS model
         rom, red_summary = reduce_adaptive_greedy(fom=fom, reductor=reductor, parameter_space=parameter_space,
@@ -170,7 +186,7 @@ def main(
                                        error_norms=(fom.h1_0_semi_norm, fom.l2_norm),
                                        condition=True,
                                        test_mus=parameter_space.sample_randomly(test),
-                                       basis_sizes=0 if plot_error_sequence else 1,
+                                       basis_sizes=0 if plot_error_sequence or plot_batch_comparison else 1,
                                        pool=None if fenics else pool  # cannot pickle FEniCS model
                                        )
 
@@ -180,6 +196,8 @@ def main(
     print(results['summary'])
     sys.stdout.flush()
 
+    if alg == 'batch_greedy' and plot_batch_comparison:
+        plot_batch_reduction(results,batchsize)
     if plot_error_sequence:
         plot_reduction_error_analysis(results)
     if plot_err:
@@ -298,6 +316,34 @@ def reduce_greedy(fom, reductor, parameter_space, snapshots_per_block,
 """
 
     return rom, summary
+
+def reduce_batch_greedy(fom, reductor, parameter_space, snapshots_per_block,
+                  extension_alg_name, max_extensions, use_error_estimator, pool,
+                  batchsize):
+
+    from pymor.algorithms.batchgreedy import rb_batch_greedy
+
+    # run greedy
+    training_set = parameter_space.sample_uniformly(snapshots_per_block)
+    greedy_data = rb_batch_greedy(fom, reductor, training_set,
+                            use_error_estimator=use_error_estimator, error_norm=fom.h1_0_semi_norm,
+                            extension_params={'method': extension_alg_name}, max_extensions=max_extensions,
+                            pool=pool, rtol=1e-3, batchsize=batchsize)
+    rom = greedy_data['rom']
+
+    # generate summary
+    real_rb_size = rom.solution_space.dim
+    training_set_size = len(training_set)
+    summary = f'''Greedy basis generation:
+   size of training set:   {training_set_size}
+   error estimator used:   {use_error_estimator}
+   extension method:       {extension_alg_name}
+   prescribed basis size:  {max_extensions}
+   actual basis size:      {real_rb_size}
+   elapsed time:           {greedy_data["time"]}
+'''
+
+    return rom, summary, greedy_data
 
 
 def reduce_adaptive_greedy(fom, reductor, parameter_space, validation_mus,
