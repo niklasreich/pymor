@@ -13,6 +13,7 @@ src/pymordemos/reduced_model.out
 src/pymordemos/results.out
 src/pymortests/reduced_model.out
 src/pymortests/results.out
+src/pymordemos/thermalblock_results
 
 # Packages
 *.egg
