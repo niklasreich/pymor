@@ -75,6 +75,7 @@ def main(
         'residual_basis',
         help='Reductor (error estimator) to choose.'
     ),
+    write_results: bool = Option(False, help='Write results to a file.'),
     test: int = Option(10, help='Use COUNT snapshots for stochastic error estimation.'),
 ):
     """Thermalblock demo."""
@@ -186,7 +187,7 @@ def main(
                                        error_norms=(fom.h1_0_semi_norm, fom.l2_norm),
                                        condition=True,
                                        test_mus=parameter_space.sample_randomly(test),
-                                       basis_sizes=0 if plot_error_sequence or plot_batch_comparison else 1,
+                                       basis_sizes=0 if plot_error_sequence or plot_batch_comparison or write_results else 1,
                                        pool=None if fenics else pool  # cannot pickle FEniCS model
                                        )
 
@@ -206,6 +207,29 @@ def main(
         URB = reductor.reconstruct(rom.solve(mumax))
         fom.visualize((U, URB, U - URB), legend=('Detailed Solution', 'Reduced Solution', 'Error'),
                       title='Maximum Error Solution', separate_colorbars=True, block=True)
+    if write_results:
+        import pandas as pd
+        filename = 'thermalblock_results/batch_greedy_size' + str(batchsize) + '_'
+        
+        error_norms = 'norms' in results
+        error_estimator = 'error_estimates' in results
+
+        basis_sizes = results['basis_sizes']
+        if error_norms:
+            error_norm_names = results['error_norm_names']
+            max_errors = results['max_errors']
+            errors = results['errors']
+        if error_estimator:
+            max_estimates = results['max_error_estimates']
+
+        if error_norms or error_estimator:
+            if error_norms:
+                for name, errors in zip(error_norm_names, max_errors):
+                    df = pd.DataFrame(errors)
+                    df.to_csv(filename+name+'.csv')
+            if error_estimator:
+                df = pd.DataFrame(max_estimates)
+                df.to_csv(filename+'err_est.csv')
 
     global test_results
     test_results = results
