@@ -81,7 +81,8 @@ def weak_batch_greedy(surrogate, training_set, atol=None, rtol=None, max_extensi
     max_errs_iter = []
     max_err_mus_iter = []
 
-    while True:
+    stopped = False
+    while not stopped:
         with logger.block('Estimating errors ...'):
             # max_err, max_err_mu = surrogate.evaluate(training_set)
             this_i_errs = surrogate.evaluate(training_set,return_all_values=True)
@@ -108,10 +109,12 @@ def weak_batch_greedy(surrogate, training_set, atol=None, rtol=None, max_extensi
 
         if atol is not None and max_err <= atol:
             logger.info(f'Absolute error tolerance ({atol}) reached! Stopping extension loop.')
+            stopped = True
             break
 
         if rtol is not None and max_err / max_errs_iter[0] <= rtol:
             logger.info(f'Relative error tolerance ({rtol}) reached! Stopping extension loop.')
+            stopped = True
             break
 
         for i in range(batchsize):
@@ -120,6 +123,7 @@ def weak_batch_greedy(surrogate, training_set, atol=None, rtol=None, max_extensi
                     surrogate.extend(this_i_mus[i])
                 except ExtensionError:
                     logger.info('Extension failed. Stopping now.')
+                    stopped = True
                     break
                 extensions += 1
         iterations += 1
@@ -128,6 +132,7 @@ def weak_batch_greedy(surrogate, training_set, atol=None, rtol=None, max_extensi
 
         if max_extensions is not None and extensions >= max_extensions:
             logger.info(f'Maximum number of {max_extensions} extensions reached.')
+            stopped = True
             break
 
     tictoc = time.perf_counter() - tic
