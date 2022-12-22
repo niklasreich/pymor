@@ -40,7 +40,7 @@ def main(
         'none',
         help='Name of cache region to use for caching solution snapshots.'
     ),
-    extension_alg: Choices('trivial gram_schmidt') = Option(
+    extension_alg: Choices('trivial gram_schmidt gram_schmidt_batch') = Option(
         'gram_schmidt',
         help='Basis extension algorithm to be used.'
     ),

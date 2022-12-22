@@ -123,12 +123,12 @@ class ProjectionBasedReductor(BasicObject):
         """Reconstruct high-dimensional vector from reduced vector `u`."""
         return self.bases[basis][:u.dim].lincomb(u.to_numpy())
 
-    def extend_basis(self, U, basis='RB', method='gram_schmidt', pod_modes=1, pod_orthonormalize=True, copy_U=True):
+    def extend_basis(self, U, basis='RB', method='gram_schmidt', pod_modes=1, pod_orthonormalize=True, copy_U=True, orthogonalize=True):
         basis_length = len(self.bases[basis])
 
         extend_basis(U, self.bases[basis], self.products.get(basis), method=method, pod_modes=pod_modes,
                      pod_orthonormalize=pod_orthonormalize,
-                     copy_U=copy_U)
+                     copy_U=copy_U, orthogonalize=orthogonalize)
 
         self._check_orthonormality(basis, basis_length)
 
@@ -460,7 +460,16 @@ class DelayLTIPGReductor(ProjectionBasedReductor):
         return super().reconstruct(u, basis)
 
 
-def extend_basis(U, basis, product=None, method='gram_schmidt', pod_modes=1, pod_orthonormalize=True, copy_U=True):
+def extend_basis(U, basis, product=None, method='gram_schmidt', pod_modes=1, pod_orthonormalize=True, copy_U=True, orthogonalize=True):   
+    if method == 'gram_schmidt_batch':
+        # this method orthogonalizes only on certain extensions
+        if orthogonalize:
+            # orthogonalize with normal gram_schmidt
+            # (usually at end of batch)
+            method = 'gram_schmidt'
+        else: # do not orthogonalize
+            method = 'trivial'
+    
     assert method in ('trivial', 'gram_schmidt', 'pod')
 
     basis_length = len(basis)

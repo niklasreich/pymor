@@ -74,6 +74,9 @@ def weak_batch_greedy(surrogate, training_set, atol=None, rtol=None, max_extensi
     if pool:
         training_set = pool.scatter_list(training_set)
 
+    if surrogate.extension_params['method'] == 'gram_schmidt_batch':
+        surrogate.extension_params['orthogonalize'] = False
+
     extensions = 0
     iterations = 0
     max_errs_ext = []
@@ -120,6 +123,10 @@ def weak_batch_greedy(surrogate, training_set, atol=None, rtol=None, max_extensi
         for i in range(batchsize):
             with logger.block(f'Extending surrogate for mu = {this_i_mus[i]} ...'):
                 try:
+                    if i==batchsize-1:
+                        surrogate.extension_params['orthogonalize'] = True
+                    else:
+                        surrogate.extension_params['orthogonalize'] = False
                     surrogate.extend(this_i_mus[i])
                 except ExtensionError:
                     logger.info('Extension failed. Stopping now.')
