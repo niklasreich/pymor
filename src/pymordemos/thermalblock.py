@@ -112,6 +112,11 @@ def main(
         fom.visualize(Us, legend=legend, title='Detailed Solutions for different parameters',
                       separate_colorbars=False, block=True)
 
+    if pickle:
+            # set name string once at the start to have all results in a directory
+            # with the start date in the name
+            dir_str = 'results/' + datetime.now().strftime("%Y_%m_%d_") + pickle
+
     for this_batchsize in range(1,batchsize+1):
 
         print('')
@@ -180,7 +185,6 @@ def main(
             from datetime import datetime
             if not os.path.exists('results'):
                 os.mkdir('results')
-            dir_str = 'results/' + datetime.now().strftime("%Y_%m_%d_") + pickle
             if not os.path.exists(dir_str):
                 os.mkdir(dir_str)
             with open(dir_str + '/' + 'config.txt','w') as f:
