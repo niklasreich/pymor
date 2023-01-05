@@ -6,6 +6,7 @@
 import sys
 import time
 import pathlib
+from datetime import datetime
 
 from typer import Argument, Option, run
 
@@ -77,7 +78,10 @@ def main(
     test: int = Option(10, help='Use COUNT snapshots for stochastic error estimation.'),
     plot_batch_comparison: bool = Option(False, help='Plot some example solutions.'),
     write_results: bool = Option(False, help='Write results to a file.'),
-    reduced_info: bool = Option(False, help='Reduce text output in console and suppress plots.'),
+    greedy_start: Choices('standard minmax random') = Option(
+        'standard',
+        help='Decides how the batch in the first greedy iteration is determined.'
+    ),
 ):
     """Thermalblock demo."""
     if fenics and cache_region != 'none':
@@ -160,7 +164,8 @@ def main(
                                                         max_extensions=rbsize,
                                                         use_error_estimator=greedy_with_error_estimator,
                                                         pool=pool if parallel else None,
-                                                        batchsize=this_batchsize)
+                                                        batchsize=this_batchsize,
+                                                        greedy_start=greedy_start)
         elif alg == 'adaptive_greedy':
             parallel = greedy_with_error_estimator or not fenics  # cannot pickle FEniCS model
             rom, red_summary = reduce_adaptive_greedy(fom=fom, reductor=reductor, parameter_space=parameter_space,
@@ -182,7 +187,6 @@ def main(
         if pickle:
             print(f"\nWriting reduced model to file {pickle}_reduced_bs{this_batchsize} ...")
             import os
-            from datetime import datetime
             if not os.path.exists('results'):
                 os.mkdir('results')
             if not os.path.exists(dir_str):
@@ -194,7 +198,8 @@ def main(
                         '\nmax. rbsize: ' + str(rbsize) + 
                         '\nparameter vals per dim: ' + str(snapshots) +
                         '\next. alg: ' + extension_alg.value +
-                        '\nnum. of test snapshots for stoch. test' + str(test))
+                        '\nnum. of test snapshots for stoch. test' + str(test) +
+                        '\ngreedy start: ' + greedy_start)
             with open(dir_str + '/' + pickle + '_reduced_bs'+str(this_batchsize), 'wb') as f:
                 dump((batch_greedy_data, parameter_space), f)
             if not fenics and this_batchsize == 1:  # FEniCS data structures do not support serialization
@@ -202,23 +207,24 @@ def main(
                 with open(dir_str + '/' + pickle + '_detailed', 'wb') as f:
                     dump((fom, reductor), f)
 
-        print('\nSearching for maximum error on random snapshots ...')
+        else:
+            print('\nSearching for maximum error on random snapshots ...')
 
-        results = reduction_error_analysis(rom,
-                                        fom=fom,
-                                        reductor=reductor,
-                                        error_estimator=True,
-                                        error_norms=(fom.h1_0_semi_norm, fom.l2_norm),
-                                        condition=True,
-                                        test_mus=parameter_space.sample_randomly(test),
-                                        basis_sizes=0 if plot_error_sequence or plot_batch_comparison or write_results else 1,
-                                        pool=None if fenics else pool  # cannot pickle FEniCS model
-                                        )
+            results = reduction_error_analysis(rom,
+                                            fom=fom,
+                                            reductor=reductor,
+                                            error_estimator=True,
+                                            error_norms=(fom.h1_0_semi_norm, fom.l2_norm),
+                                            condition=True,
+                                            test_mus=parameter_space.sample_randomly(test),
+                                            basis_sizes=0 if plot_error_sequence or plot_batch_comparison or write_results else 1,
+                                            pool=None if fenics else pool  # cannot pickle FEniCS model
+                                            )
 
-        print('\n*** RESULTS ***\n')
-        print(fom_summary)
-        print(red_summary)
-        print(results['summary'])
+            print('\n*** RESULTS ***\n')
+            print(fom_summary)
+            print(red_summary)
+            print(results['summary'])
         sys.stdout.flush()
 
     if alg == 'batch_greedy' and plot_batch_comparison:
@@ -255,8 +261,8 @@ def main(
                 df = pd.DataFrame(max_estimates)
                 df.to_csv(filename+'err_est.csv')
 
-    global test_results
-    test_results = results
+    # global test_results
+    # test_results = results
 
 
 def discretize_pymor(xblocks, yblocks, grid_num_intervals, use_list_vector_array):
@@ -367,7 +373,7 @@ def reduce_greedy(fom, reductor, parameter_space, snapshots_per_block,
 
 def reduce_batch_greedy(fom, reductor, parameter_space, snapshots_per_block,
                   extension_alg_name, max_extensions, use_error_estimator, pool,
-                  batchsize):
+                  batchsize, greedy_start):
 
     from pymor.algorithms.batchgreedy import rb_batch_greedy
 
@@ -376,7 +382,7 @@ def reduce_batch_greedy(fom, reductor, parameter_space, snapshots_per_block,
     greedy_data = rb_batch_greedy(fom, reductor, training_set,
                             use_error_estimator=use_error_estimator, error_norm=fom.h1_0_semi_norm,
                             extension_params={'method': extension_alg_name}, max_extensions=max_extensions,
-                            pool=pool, batchsize=batchsize)
+                            pool=pool, batchsize=batchsize, greedy_start=greedy_start)
     rom = greedy_data['rom']
 
     # generate summary
