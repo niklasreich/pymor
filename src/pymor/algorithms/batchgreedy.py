@@ -14,7 +14,7 @@ from pymor.parallel.interface import RemoteObject
 
 
 def weak_batch_greedy(surrogate, training_set, atol=None, rtol=None, max_extensions=None, pool=None,
-                      batchsize=1):
+                      batchsize=None, greedy_start=None):
     """Weak greedy basis generation algorithm :cite:`BCDDPW11`.
 
     This algorithm generates an approximation basis for a given set of vectors
@@ -55,6 +55,13 @@ def weak_batch_greedy(surrogate, training_set, atol=None, rtol=None, max_extensi
         :extensions:             Number of performed basis extensions.
         :time:                   Total runtime of the algorithm.
     """
+
+    if batchsize is None:
+        batchsize = 1
+
+    if greedy_start is None:
+        greedy_start = 'standard'
+
     logger = getLogger('pymor.algorithms.greedy.weak_greedy')
     training_set = list(training_set)
     logger.info(f'Started batch greedy search on training set of size {len(training_set)}.')
@@ -90,6 +97,47 @@ def weak_batch_greedy(surrogate, training_set, atol=None, rtol=None, max_extensi
             # max_err, max_err_mu = surrogate.evaluate(training_set)
             this_i_errs = surrogate.evaluate(training_set,return_all_values=True)
             this_i_mus = []
+            if extensions==0 and iterations==0:
+                if greedy_start=='minmax':
+                    # for the first batch prefer snapshots that only contain the minimal
+                    # or maximal value for each parameter
+                    logger.info('First batch computation: minmax.')
+                    max_err = np.max(this_i_errs)
+                    min_val = float('inf')
+                    max_val = float('-inf')
+                    for i in range(len(training_set)):
+                        this_min = np.min(training_set[i]['diffusion'])
+                        this_max = np.max(training_set[i]['diffusion'])
+                        if this_min < min_val:
+                            min_val = this_min
+                        if this_max > max_val:
+                            max_val = this_max
+                    for i in range(len(training_set)):
+                        stopped = False
+                        mu = training_set[i]['diffusion']
+                        for j in range(len(training_set[0]['diffusion'])):
+                            if not (mu[j] == min_val or mu[j] == max_val):
+                                stopped = True
+                                break
+                        if not stopped:
+                            this_i_errs[i] = 2*max_err
+                elif greedy_start=='random':
+                    # start with random config in the first batch
+                    # this achieved by artificially increasing certain error values
+                    logger.info('First batch computation: random.')
+                    rand_ind = np.random.randint(0,len(training_set),size=batchsize)
+                    while len(np.unique(rand_ind)) < len(rand_ind):
+                        rand_ind = np.random.randint(0,len(training_set),size=batchsize)
+                    max_err = np.max(this_i_errs)
+                    for i in range(batchsize):
+                        this_i_errs[rand_ind[i]] = 2*max_err
+                elif greedy_start=='standard':
+                    # for 'standard' start with the chronological frist snapshots
+                    # in the first batch
+                    logger.info('First batch computation: standard.')
+                else:
+                    logger.info('Unknwon starting method for th greedy alogrithm. Aborting now.')
+                    return
             for i in range(batchsize):
                 max_ind = np.argmax(this_i_errs)
                 if i==0:  # only once per batch -> once every greedy iteration
@@ -180,7 +228,7 @@ class WeakGreedySurrogate(BasicObject):
 
 def rb_batch_greedy(fom, reductor, training_set, use_error_estimator=True, error_norm=None,
               atol=None, rtol=None, max_extensions=None, extension_params=None, pool=None,
-              batchsize=1):
+              batchsize=None, greedy_start=None):
     """Weak Greedy basis generation using the RB approximation error as surrogate.
 
     This algorithm generates a reduced basis using the :func:`weak greedy <weak_greedy>`
@@ -237,7 +285,8 @@ def rb_batch_greedy(fom, reductor, training_set, use_error_estimator=True, error
     """
     surrogate = RBSurrogate(fom, reductor, use_error_estimator, error_norm, extension_params, pool or dummy_pool)
 
-    result = weak_batch_greedy(surrogate, training_set, atol=atol, rtol=rtol, max_extensions=max_extensions, pool=pool, batchsize=batchsize)
+    result = weak_batch_greedy(surrogate, training_set, atol=atol, rtol=rtol, max_extensions=max_extensions, pool=pool,
+                               batchsize=batchsize, greedy_start=greedy_start)
     result['rom'] = surrogate.rom
 
     return result
