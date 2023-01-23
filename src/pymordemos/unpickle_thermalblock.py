@@ -27,6 +27,7 @@ def main(
     export_error_data: bool = Option(False, help='Create files to plot errors in Matlab.'),
     stoch_test_size: int = Option(10, help='Use COUNT snapshots for stochastic error estimation.'),
     export_mu_choice: bool = Option(False, help='Create files to analyze the snapshot choices.'),
+    export_calc_time: bool = Option(False, help='Create files to analyze the overall computation times.'),
 ):  
     path = 'results/'+ res_dir
 
@@ -208,6 +209,45 @@ def main(
             df.to_csv(path + '/mu_matrix_bs' + size_str + '.csv')
             print('\tbatch size ' + size_str + ' done.')
 
+    
+    if export_calc_time:
+
+        # Load detailed model
+        print('## Export Calculation Times ##\n')
+
+        # Identify reduced models
+        print('Identifying reduced models ...')
+        reduced_files = glob('*_reduced_bs*',root_dir=path + '/')
+        print('\t' + str(len(reduced_files)) + ' pickle-file(s) of reduced models found.')
+
+        data = {}
+        data['batchsize']=[]
+        data['calc_time']=[]
+
+        # Retracing the mu choices for every reduced model
+        print('Retracing the mu choices...')
+
+        for i in range(len(reduced_files)):
+
+            # load reduced model
+            reduced_path = reduced_files[i]
+            with open(path + '/' + reduced_path, 'rb') as f:
+                (batch_greedy_data, parameter_space) = load(f)
+
+
+            # retrace batchsize and determine name string
+            ind = len(reduced_path)-1
+            while  reduced_path[ind-1:].isnumeric():
+                ind -= 1
+            batchsize = int(reduced_path[ind:])
+
+            data['batchsize'].append(batchsize)
+            data['calc_time'].append(batch_greedy_data['time'])
+
+        # save in results
+        df = pd.DataFrame(data)
+        df.to_csv(path + '/calc_times.csv')
+        print('\tDone.')
 
 if __name__ == '__main__':
     run(main)
