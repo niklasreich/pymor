@@ -117,9 +117,10 @@ def main(
                       separate_colorbars=False, block=True)
 
     if pickle:
-            # set name string once at the start to have all results in a directory
-            # with the start date in the name
-            dir_str = 'results/' + datetime.now().strftime('%Y_%m_%d_') + pickle
+        # set name string once at the start to have all results in a directory
+        # with the start date in the name
+        dir_str = 'results/' + datetime.now().strftime('%Y_%m_%d_') + pickle
+        detailed_saved = False
 
     for this_batchsize in range(1,batchsize+1):
 
@@ -201,11 +202,12 @@ def main(
                         '\nnum. of test snapshots for stoch. test' + str(test) +
                         '\ngreedy start: ' + greedy_start)
             with open(dir_str + '/' + pickle + '_reduced_bs'+str(this_batchsize), 'wb') as f:
-                dump((batch_greedy_data, parameter_space), f)
-            if not fenics and this_batchsize == 1:  # FEniCS data structures do not support serialization
-                print(f'Writing detailed model and reductor to file {pickle}_detailed ...')
+                dump((batch_greedy_data, parameter_space, reductor), f)
+            if not fenics and not detailed_saved:  # FEniCS data structures do not support serialization
+                print(f'Writing detailed model an reductor to file {pickle}_detailed ...')
                 with open(dir_str + '/' + pickle + '_detailed', 'wb') as f:
-                    dump((fom, reductor), f)
+                    dump(fom, f)
+                detailed_saved = True
 
         else:
             print('\nSearching for maximum error on random snapshots ...')

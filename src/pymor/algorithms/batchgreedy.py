@@ -168,17 +168,19 @@ def weak_batch_greedy(surrogate, training_set, atol=None, rtol=None, max_extensi
             stopped = True
             break
 
+        stopped = True
         for i in range(batchsize):
             with logger.block(f'Extending surrogate for mu = {this_i_mus[i]} ...'):
                 try:
-                    if i==batchsize-1:
-                        surrogate.extension_params['orthogonalize'] = True
-                    else:
-                        surrogate.extension_params['orthogonalize'] = False
+                    # if i==batchsize-1:
+                    #     surrogate.extension_params['orthogonalize'] = True
+                    # else:
+                    #     surrogate.extension_params['orthogonalize'] = False
                     surrogate.extend(this_i_mus[i])
+                    stopped = False
                 except ExtensionError:
-                    logger.info('Extension failed. Stopping now.')
-                    stopped = True
+                    logger.info('This extension failed. Still trying other extensions from the batch.')
+                    # stopped = True
                     break
                 extensions += 1
         iterations += 1
