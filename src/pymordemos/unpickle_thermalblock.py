@@ -40,7 +40,7 @@ def main(
     if export_error_data:
 
         # Load detailed model
-        print('## Export Error Data ##\n')
+        print('\n\n## Export Error Data ##\n')
         print('Loading detailed model ...')
         detailed_path = glob('*_detailed',root_dir=path + '/')
         if len(detailed_path)==0:
@@ -55,7 +55,7 @@ def main(
             return
         detailed_path = detailed_path[0]
         with open(path + '/' + detailed_path, 'rb') as f:
-            (fom, reductor) = load(f)
+            fom = load(f)
         print('\tDetailed model loaded.')
 
         # Identify reduced models
@@ -71,7 +71,7 @@ def main(
             # load reduced model
             reduced_path = reduced_files[i]
             with open(path + '/' + reduced_path, 'rb') as f:
-                (batch_greedy_data, parameter_space) = load(f)
+                (batch_greedy_data, parameter_space, reductor) = load(f)
 
             # calculate errors
             results = reduction_error_analysis(batch_greedy_data['rom'],
@@ -120,7 +120,7 @@ def main(
     if export_mu_choice:
 
         # Load detailed model
-        print('## Export Data for choices of mu ##\n')
+        print('\n\n## Export Data for choices of mu ##\n')
         print('Loading detailed model ...')
         detailed_path = glob('*_detailed',root_dir=path + '/')
         if len(detailed_path)==0:
@@ -135,7 +135,7 @@ def main(
             return
         detailed_path = detailed_path[0]
         with open(path + '/' + detailed_path, 'rb') as f:
-            (fom, reductor) = load(f)
+            fom = load(f)
         print('\tDetailed model loaded.')
 
         # Identify reduced models
@@ -178,7 +178,7 @@ def main(
             # load reduced model
             reduced_path = reduced_files[i]
             with open(path + '/' + reduced_path, 'rb') as f:
-                (batch_greedy_data, parameter_space) = load(f)
+                (batch_greedy_data, parameter_space, reductor) = load(f)
 
             #Retracing training space
             training_space = parameter_space.sample_uniformly(snapshots_per_dim)
@@ -213,7 +213,7 @@ def main(
     if export_calc_time:
 
         # Load detailed model
-        print('## Export Calculation Times ##\n')
+        print('\n\n## Export Calculation Times ##\n')
 
         # Identify reduced models
         print('Identifying reduced models ...')
@@ -232,7 +232,7 @@ def main(
             # load reduced model
             reduced_path = reduced_files[i]
             with open(path + '/' + reduced_path, 'rb') as f:
-                (batch_greedy_data, parameter_space) = load(f)
+                (batch_greedy_data, parameter_space, reductor) = load(f)
 
 
             # retrace batchsize and determine name string
