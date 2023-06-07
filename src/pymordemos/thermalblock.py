@@ -20,6 +20,7 @@ from pymor.tools.typer import Choices
 
 # python -m thermalblock 3 2 5 100 5 --alg batch_greedy --plot-batch-comparison
 
+
 def main(
     xblocks: int = Argument(..., help='Number of blocks in x direction.'),
     yblocks: int = Argument(..., help='Number of blocks in y direction.'),
@@ -36,7 +37,8 @@ def main(
     adaptive_greedy_gamma: float = Option(0.2, help='See pymor.algorithms.adaptivegreedy.'),
     adaptive_greedy_rho: float = Option(1.1, help='See pymor.algorithms.adaptivegreedy.'),
     adaptive_greedy_theta: float = Option(0., help='See pymor.algorithms.adaptivegreedy.'),
-    alg: Choices('naive greedy batch_greedy adaptive_greedy pod') = Option('greedy', help='The model reduction algorithm to use.'),
+    alg: Choices('naive greedy batch_greedy adaptive_greedy pod') = Option(
+        'greedy', help='The model reduction algorithm to use.'),
     cache_region: Choices('none memory disk persistent') = Option(
         'none',
         help='Name of cache region to use for caching solution snapshots.'
@@ -122,11 +124,11 @@ def main(
         dir_str = 'results/' + datetime.now().strftime('%Y_%m_%d_') + pickle
         detailed_saved = False
 
-    for this_batchsize in range(1,batchsize+1):
+    for this_batchsize in range(1, batchsize+1):
 
         print('')
         print('')
-        print('RB generation for batch size ' + str(this_batchsize) +' ...')
+        print('RB generation for batch size ' + str(this_batchsize) + ' ...')
 
         # define estimator for coercivity constant
         from pymor.parameters.functionals import ExpressionParameterFunctional
@@ -138,7 +140,7 @@ def main(
         if reductor_str == 'residual_basis':
             from pymor.reductors.coercive import CoerciveRBReductor
             reductor = CoerciveRBReductor(fom, product=product, coercivity_estimator=coercivity_estimator,
-                                        check_orthonormality=False)
+                                          check_orthonormality=False)
         elif reductor_str == 'traditional':
             from pymor.reductors.coercive import SimpleCoerciveRBReductor
             reductor = SimpleCoerciveRBReductor(fom, product=product, coercivity_estimator=coercivity_estimator,
@@ -152,36 +154,34 @@ def main(
         elif alg == 'greedy':
             parallel = greedy_with_error_estimator or not fenics  # cannot pickle FEniCS model
             rom, red_summary = reduce_greedy(fom=fom, reductor=reductor, parameter_space=parameter_space,
-                                            snapshots_per_block=snapshots,
-                                            extension_alg_name=extension_alg.value,
-                                            max_extensions=rbsize,
-                                            use_error_estimator=greedy_with_error_estimator,
-                                            pool=pool if parallel else None)
+                                             snapshots_per_block=snapshots,
+                                             extension_alg_name=extension_alg.value,
+                                             max_extensions=rbsize,
+                                             use_error_estimator=greedy_with_error_estimator,
+                                             pool=pool if parallel else None)
         elif alg == 'batch_greedy':
             parallel = greedy_with_error_estimator or not fenics  # cannot pickle FEniCS model
-            rom, red_summary, batch_greedy_data = reduce_batch_greedy(fom=fom, reductor=reductor, parameter_space=parameter_space,
-                                                        snapshots_per_block=snapshots,
-                                                        extension_alg_name=extension_alg.value,
-                                                        max_extensions=rbsize,
-                                                        use_error_estimator=greedy_with_error_estimator,
-                                                        pool=pool if parallel else None,
-                                                        batchsize=this_batchsize,
-                                                        greedy_start=greedy_start)
+            rom, red_summary, batch_greedy_data\
+                = reduce_batch_greedy(fom=fom, reductor=reductor, parameter_space=parameter_space,
+                                      snapshots_per_block=snapshots, extension_alg_name=extension_alg.value,
+                                      max_extensions=rbsize, use_error_estimator=greedy_with_error_estimator,
+                                      pool=pool if parallel else None, batchsize=this_batchsize,
+                                      greedy_start=greedy_start)
         elif alg == 'adaptive_greedy':
             parallel = greedy_with_error_estimator or not fenics  # cannot pickle FEniCS model
             rom, red_summary = reduce_adaptive_greedy(fom=fom, reductor=reductor, parameter_space=parameter_space,
-                                                    validation_mus=snapshots,
-                                                    extension_alg_name=extension_alg.value,
-                                                    max_extensions=rbsize,
-                                                    use_error_estimator=greedy_with_error_estimator,
-                                                    rho=adaptive_greedy_rho,
-                                                    gamma=adaptive_greedy_gamma,
-                                                    theta=adaptive_greedy_theta,
-                                                    pool=pool if parallel else None)
+                                                      validation_mus=snapshots,
+                                                      extension_alg_name=extension_alg.value,
+                                                      max_extensions=rbsize,
+                                                      use_error_estimator=greedy_with_error_estimator,
+                                                      rho=adaptive_greedy_rho,
+                                                      gamma=adaptive_greedy_gamma,
+                                                      theta=adaptive_greedy_theta,
+                                                      pool=pool if parallel else None)
         elif alg == 'pod':
             rom, red_summary = reduce_pod(fom=fom, reductor=reductor, parameter_space=parameter_space,
-                                        snapshots_per_block=snapshots,
-                                        basis_size=rbsize)
+                                          snapshots_per_block=snapshots,
+                                          basis_size=rbsize)
         else:
             assert False  # this should never happen
 
@@ -192,15 +192,15 @@ def main(
                 os.mkdir('results')
             if not os.path.exists(dir_str):
                 os.mkdir(dir_str)
-            with open(dir_str + '/' + 'config.txt','w') as f:
-                f.write('xblocks: '+ str(xblocks) + ' yblocks: '+ str(yblocks) +
-                        '\ngrid: ' + str(grid) + 
-                        '\nalg: ' + alg.value +
-                        '\nmax. rbsize: ' + str(rbsize) + 
-                        '\nparameter vals per dim: ' + str(snapshots) +
-                        '\next. alg: ' + extension_alg.value +
-                        '\nnum. of test snapshots for stoch. test' + str(test) +
-                        '\ngreedy start: ' + greedy_start)
+            with open(dir_str + '/' + 'config.txt', 'w') as f:
+                f.write('xblocks: ' + str(xblocks) + ' yblocks: ' + str(yblocks)
+                        + '\ngrid: ' + str(grid)
+                        + '\nalg: ' + alg.value
+                        + '\nmax. rbsize: ' + str(rbsize)
+                        + '\nparameter vals per dim: ' + str(snapshots)
+                        + '\next. alg: ' + extension_alg.value
+                        + '\nnum. of test snapshots for stoch. test' + str(test)
+                        + '\ngreedy start: ' + greedy_start)
             with open(dir_str + '/' + pickle + '_reduced_bs'+str(this_batchsize), 'wb') as f:
                 dump((batch_greedy_data, parameter_space, reductor), f)
             if not fenics and not detailed_saved:  # FEniCS data structures do not support serialization
@@ -213,15 +213,16 @@ def main(
             print('\nSearching for maximum error on random snapshots ...')
 
             results = reduction_error_analysis(rom,
-                                            fom=fom,
-                                            reductor=reductor,
-                                            error_estimator=True,
-                                            error_norms=(fom.h1_0_semi_norm, fom.l2_norm),
-                                            condition=True,
-                                            test_mus=parameter_space.sample_randomly(test),
-                                            basis_sizes=0 if plot_error_sequence or plot_batch_comparison or write_results else 1,
-                                            pool=None if fenics else pool  # cannot pickle FEniCS model
-                                            )
+                                               fom=fom,
+                                               reductor=reductor,
+                                               error_estimator=True,
+                                               error_norms=(fom.h1_0_semi_norm, fom.l2_norm),
+                                               condition=True,
+                                               test_mus=parameter_space.sample_randomly(test),
+                                               basis_sizes=0 if (plot_error_sequence
+                                                                 or plot_batch_comparison
+                                                                 or write_results) else 1,
+                                               pool=None if fenics else pool)  # cannot pickle FEniCS model
 
             print('\n*** RESULTS ***\n')
             print(fom_summary)
@@ -230,7 +231,7 @@ def main(
         sys.stdout.flush()
 
     if alg == 'batch_greedy' and plot_batch_comparison:
-        plot_batch_reduction(results,this_batchsize)
+        plot_batch_reduction(results, this_batchsize)
     if plot_error_sequence:
         plot_reduction_error_analysis(results)
     if plot_err:
@@ -242,7 +243,6 @@ def main(
     if write_results:
         import pandas as pd
         filename = 'thermalblock_results/batch_greedy_size' + str(this_batchsize) + '_'
-        
         error_norms = 'norms' in results
         error_estimator = 'error_estimates' in results
 
@@ -373,18 +373,19 @@ def reduce_greedy(fom, reductor, parameter_space, snapshots_per_block,
 
     return rom, summary
 
+
 def reduce_batch_greedy(fom, reductor, parameter_space, snapshots_per_block,
-                  extension_alg_name, max_extensions, use_error_estimator, pool,
-                  batchsize, greedy_start):
+                        extension_alg_name, max_extensions, use_error_estimator, pool,
+                        batchsize, greedy_start):
 
     from pymor.algorithms.batchgreedy import rb_batch_greedy
 
     # run greedy
     training_set = parameter_space.sample_uniformly(snapshots_per_block)
     greedy_data = rb_batch_greedy(fom, reductor, training_set,
-                            use_error_estimator=use_error_estimator, error_norm=fom.h1_0_semi_norm,
-                            extension_params={'method': extension_alg_name}, max_extensions=max_extensions,
-                            pool=pool, batchsize=batchsize, greedy_start=greedy_start)
+                                  use_error_estimator=use_error_estimator, error_norm=fom.h1_0_semi_norm,
+                                  extension_params={'method': extension_alg_name}, max_extensions=max_extensions,
+                                  pool=pool, batchsize=batchsize, greedy_start=greedy_start)
     rom = greedy_data['rom']
 
     # generate summary

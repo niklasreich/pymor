@@ -95,10 +95,10 @@ def weak_batch_greedy(surrogate, training_set, atol=None, rtol=None, max_extensi
     while not stopped:
         with logger.block('Estimating errors ...'):
             # max_err, max_err_mu = surrogate.evaluate(training_set)
-            this_i_errs = surrogate.evaluate(training_set,return_all_values=True)
+            this_i_errs = surrogate.evaluate(training_set, return_all_values=True)
             this_i_mus = []
-            if extensions==0 and iterations==0:
-                if greedy_start=='minmax':
+            if (extensions == 0) and (iterations == 0):
+                if greedy_start == 'minmax':
                     # for the first batch prefer snapshots that only contain the minimal
                     # or maximal value for each parameter
                     logger.info('First batch computation: minmax.')
@@ -121,17 +121,17 @@ def weak_batch_greedy(surrogate, training_set, atol=None, rtol=None, max_extensi
                                 break
                         if not stopped:
                             this_i_errs[i] = 2*max_err
-                elif greedy_start=='random':
+                elif greedy_start == 'random':
                     # start with random config in the first batch
                     # this achieved by artificially increasing certain error values
                     logger.info('First batch computation: random.')
-                    rand_ind = np.random.randint(0,len(training_set),size=batchsize)
+                    rand_ind = np.random.randint(0, len(training_set), size=batchsize)
                     while len(np.unique(rand_ind)) < len(rand_ind):
-                        rand_ind = np.random.randint(0,len(training_set),size=batchsize)
+                        rand_ind = np.random.randint(0, len(training_set), size=batchsize)
                     max_err = np.max(this_i_errs)
                     for i in range(batchsize):
                         this_i_errs[rand_ind[i]] = 2*max_err
-                elif greedy_start=='standard':
+                elif greedy_start == 'standard':
                     # for 'standard' start with the chronological frist snapshots
                     # in the first batch
                     logger.info('First batch computation: standard.')
@@ -140,23 +140,24 @@ def weak_batch_greedy(surrogate, training_set, atol=None, rtol=None, max_extensi
                     return
             for i in range(batchsize):
                 max_ind = np.argmax(this_i_errs)
-                if i==0:  # only once per batch -> once every greedy iteration
+                if i == 0:  # only once per batch -> once every greedy iteration
                     max_err = this_i_errs[max_ind]
                     max_err_mu = training_set[max_ind]
                     max_errs_iter.append(max_err)
                     max_err_mus_iter.append(max_err_mu)
-                
+
                 # for every mu of the batch -> once every basis extension
                 max_errs_ext.append(this_i_errs[max_ind])
                 max_err_mus_ext.append(training_set[max_ind])
-                
+
                 this_i_mus.append(training_set[max_ind])
                 this_i_errs[max_ind] = 0
 
             # max_errs.append(max_err)
             # max_err_mus.append(max_err_mu)
 
-        logger.info(f'Maximum error after {iterations} iterations ({extensions} extensions): {max_err} (mu = {max_err_mu})')
+        logger.info(f'Maximum error after {iterations} iterations ({extensions} extensions):\
+                    {max_err} (mu = {max_err_mu})')
 
         if atol is not None and max_err <= atol:
             logger.info(f'Absolute error tolerance ({atol}) reached! Stopping extension loop.')
@@ -229,8 +230,8 @@ class WeakGreedySurrogate(BasicObject):
 
 
 def rb_batch_greedy(fom, reductor, training_set, use_error_estimator=True, error_norm=None,
-              atol=None, rtol=None, max_extensions=None, extension_params=None, pool=None,
-              batchsize=None, greedy_start=None):
+                    atol=None, rtol=None, max_extensions=None, extension_params=None, pool=None,
+                    batchsize=None, greedy_start=None):
     """Weak Greedy basis generation using the RB approximation error as surrogate.
 
     This algorithm generates a reduced basis using the :func:`weak greedy <weak_greedy>`
