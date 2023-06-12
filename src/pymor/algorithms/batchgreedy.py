@@ -5,6 +5,7 @@
 import time
 
 import numpy as np
+import multiprocessing as mp
 
 from pymor.core.base import BasicObject, abstractmethod
 from pymor.core.exceptions import ExtensionError
@@ -14,7 +15,7 @@ from pymor.parallel.interface import RemoteObject
 
 
 def weak_batch_greedy(surrogate, training_set, atol=None, rtol=None, max_extensions=None, pool=None,
-                      batchsize=None, greedy_start=None):
+                      batchsize=None, greedy_start=None, parallel_batch=False):
     """Weak greedy basis generation algorithm :cite:`BCDDPW11`.
 
     This algorithm generates an approximation basis for a given set of vectors
@@ -156,8 +157,7 @@ def weak_batch_greedy(surrogate, training_set, atol=None, rtol=None, max_extensi
             # max_errs.append(max_err)
             # max_err_mus.append(max_err_mu)
 
-        logger.info(f'Maximum error after {iterations} iterations ({extensions} extensions):\
-                    {max_err} (mu = {max_err_mu})')
+        logger.info(f'Maximum error after {iterations} iterations ({extensions} extensions): {max_err} (mu = {max_err_mu})')
 
         if atol is not None and max_err <= atol:
             logger.info(f'Absolute error tolerance ({atol}) reached! Stopping extension loop.')
@@ -170,20 +170,25 @@ def weak_batch_greedy(surrogate, training_set, atol=None, rtol=None, max_extensi
             break
 
         stopped = True
-        for i in range(batchsize):
-            with logger.block(f'Extending surrogate for mu = {this_i_mus[i]} ...'):
-                try:
-                    # if i==batchsize-1:
-                    #     surrogate.extension_params['orthogonalize'] = True
-                    # else:
-                    #     surrogate.extension_params['orthogonalize'] = False
-                    surrogate.extend(this_i_mus[i])
-                    stopped = False
-                except ExtensionError:
-                    logger.info('This extension failed. Still trying other extensions from the batch.')
-                    # stopped = True
-                    break
-                extensions += 1
+        if parallel_batch:
+            with logger.block(f'Extending in parallel...'):
+                add, stopped = surrogate.extend_parallel(this_i_mus)
+                extensions += add
+        else:
+            for i in range(batchsize):
+                with logger.block(f'Extending surrogate for mu = {this_i_mus[i]} ...'):
+                    try:
+                        # if i==batchsize-1:
+                        #     surrogate.extension_params['orthogonalize'] = True
+                        # else:
+                        #     surrogate.extension_params['orthogonalize'] = False
+                        surrogate.extend(this_i_mus[i])
+                        stopped = False
+                    except ExtensionError:
+                        logger.info('This extension failed. Still trying other extensions from the batch.')
+                        # stopped = True
+                        break
+                    extensions += 1
         iterations += 1
 
         logger.info('')
@@ -228,10 +233,14 @@ class WeakGreedySurrogate(BasicObject):
     def extend(self, mu):
         pass
 
+    @abstractmethod
+    def extend_parallel(self, mus):
+        pass
+
 
 def rb_batch_greedy(fom, reductor, training_set, use_error_estimator=True, error_norm=None,
                     atol=None, rtol=None, max_extensions=None, extension_params=None, pool=None,
-                    batchsize=None, greedy_start=None):
+                    batchsize=None, greedy_start=None, parallel_batch=False):
     """Weak Greedy basis generation using the RB approximation error as surrogate.
 
     This algorithm generates a reduced basis using the :func:`weak greedy <weak_greedy>`
@@ -289,7 +298,7 @@ def rb_batch_greedy(fom, reductor, training_set, use_error_estimator=True, error
     surrogate = RBSurrogate(fom, reductor, use_error_estimator, error_norm, extension_params, pool or dummy_pool)
 
     result = weak_batch_greedy(surrogate, training_set, atol=atol, rtol=rtol, max_extensions=max_extensions, pool=pool,
-                               batchsize=batchsize, greedy_start=greedy_start)
+                               batchsize=batchsize, greedy_start=greedy_start, parallel_batch=parallel_batch)
     result['rom'] = surrogate.rom
 
     return result
@@ -347,6 +356,34 @@ class RBSurrogate(WeakGreedySurrogate):
                 self.remote_reductor = self.pool.push(self.reductor)
         with self.logger.block('Reducing ...'):
             self.rom = self.reductor.reduce()
+
+    def extend_parallel(self, mus):  # TODO: Anpassung auf Uebergabe gesamter Batch
+        # U = np.empty(len(mus), dtype=np.object)
+        with self.logger.block(f'Computing solution snapshots for current batch in parallel ...'):
+            with mp.Pool(processes=min(mp.cpu_count(), len(mus))) as mp_pool:
+                U = mp_pool.map(self.fom.solve, mus)
+                # U = self.fom.solve(mu)
+        add = 0
+        stopped = True
+        for i in range(len(mus)):
+            extension_params = self.extension_params
+            with self.logger.block(f'Extending basis with solution snapshot {i} of batch...'):
+                # if len(U) > 1:
+                #     if extension_params is None:
+                #        extension_params = {'method': 'pod'}
+                #     else:
+                #         extension_params.setdefault('method', 'pod')
+                try:
+                    self.reductor.extend_basis(U[i], copy_U=False, **(extension_params or {}))
+                    stopped = False
+                    add += 1
+                except ExtensionError:
+                    self.logger.info('This extension failed. Still trying other extensions from the batch.')
+                if not self.use_error_estimator:
+                    self.remote_reductor = self.pool.push(self.reductor)
+            with self.logger.block('Reducing ...'):
+                self.rom = self.reductor.reduce()
+        return add, stopped
 
 
 def _rb_surrogate_evaluate(rom=None, fom=None, reductor=None, mus=None, error_norm=None, return_all_values=False):
