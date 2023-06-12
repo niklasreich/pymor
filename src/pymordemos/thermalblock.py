@@ -84,7 +84,8 @@ def main(
         'standard',
         help='Decides how the batch in the first greedy iteration is determined.'
     ),
-    atol: float = Option(None, help='Stopping criteria for greedy.')
+    atol: float = Option(None, help='Stopping criteria for greedy.'),
+    parallel_batch: bool = Option(False, help='Calculate batch in parallel via multiprocessing.')
 ):
     """Thermalblock demo."""
     if fenics and cache_region != 'none':
@@ -167,7 +168,7 @@ def main(
                                       snapshots_per_block=snapshots, extension_alg_name=extension_alg.value,
                                       max_extensions=rbsize, use_error_estimator=greedy_with_error_estimator,
                                       pool=pool if parallel else None, batchsize=this_batchsize,
-                                      greedy_start=greedy_start, atol=atol)
+                                      greedy_start=greedy_start, atol=atol, parallel_batch=parallel_batch)
         elif alg == 'adaptive_greedy':
             parallel = greedy_with_error_estimator or not fenics  # cannot pickle FEniCS model
             rom, red_summary = reduce_adaptive_greedy(fom=fom, reductor=reductor, parameter_space=parameter_space,
@@ -377,7 +378,7 @@ def reduce_greedy(fom, reductor, parameter_space, snapshots_per_block,
 
 def reduce_batch_greedy(fom, reductor, parameter_space, snapshots_per_block,
                         extension_alg_name, max_extensions, use_error_estimator, pool,
-                        batchsize, greedy_start, atol):
+                        batchsize, greedy_start, atol, parallel_batch):
 
     from pymor.algorithms.batchgreedy import rb_batch_greedy
 
@@ -386,7 +387,7 @@ def reduce_batch_greedy(fom, reductor, parameter_space, snapshots_per_block,
     greedy_data = rb_batch_greedy(fom, reductor, training_set,
                                   use_error_estimator=use_error_estimator, error_norm=fom.h1_0_semi_norm,
                                   extension_params={'method': extension_alg_name}, max_extensions=max_extensions,
-                                  pool=pool, batchsize=batchsize, greedy_start=greedy_start, atol=atol)
+                                  pool=pool, batchsize=batchsize, greedy_start=greedy_start, atol=atol, parallel_batch=parallel_batch)
     rom = greedy_data['rom']
 
     # generate summary
