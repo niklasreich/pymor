@@ -63,6 +63,8 @@ def msd(n=6, m=2, m_i=4, k_i=4, c_i=1, as_lti=False):
     E
         The LTI |NumPy array| E, if `as_lti` is `True`, or
         the pH |NumPy array| E, if `as_lti` is `False`.
+    Q
+        The pH |NumPy array| Q, if `as_lti` is `False`.
     """
     assert n % 2 == 0
     n //= 2
