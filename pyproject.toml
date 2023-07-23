@@ -5,9 +5,9 @@ build-backend = "hatchling.build"
 [project]
 name = "pymor"
 dynamic = ["version"]
-description = " "
+description = "Library for building model order reduction applications with Python"
 readme = "README.md"
-license.file = "LICENSE.txt"
+license = {file = "LICENSE.txt"}
 requires-python = ">=3.8"
 authors = [
     { name = "pyMOR developers", email = "main.developers@pymor.org" },
@@ -166,6 +166,8 @@ pymor-vis = "pymor.scripts.pymor_vis:run"
 
 [project.urls]
 Homepage = "https://pymor.org"
+Documentation = "https://docs.pymor.org"
+Source = "https://github.com/pymor/pymor"
 
 [tool.hatch.version]
 path = "src/pymor/__init__.py"
