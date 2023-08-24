@@ -25,16 +25,14 @@ repos:
   - id: markdownlint-cli2
     args: [--fix]
 - repo: https://github.com/FlamingTempura/bibtex-tidy
-  rev: v1.11.0
+  rev: v1.8.5
   hooks:
   - id: bibtex-tidy
     args:
     - --omit=keywords,abstract
     - --curly
     - --numeric
-    - --months
     - --space
-    - --blank-lines
     - --sort
     - --duplicates
     - --strip-enclosing-braces
