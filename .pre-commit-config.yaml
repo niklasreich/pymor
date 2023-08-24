@@ -23,6 +23,28 @@ repos:
   rev: v0.8.1
   hooks:
   - id: markdownlint-cli2
+    args: [--fix]
+- repo: https://github.com/FlamingTempura/bibtex-tidy
+  rev: v1.11.0
+  hooks:
+  - id: bibtex-tidy
+    args:
+    - --omit=keywords,abstract
+    - --curly
+    - --numeric
+    - --months
+    - --space
+    - --blank-lines
+    - --sort
+    - --duplicates
+    - --strip-enclosing-braces
+    - --drop-all-caps
+    - --escape
+    - --sort-fields
+    - --strip-comments
+    - --trailing-commas
+    - --remove-empty-fields
+    - --wrap
 ci:
   autofix_prs: false
   autoupdate_schedule: quarterly
