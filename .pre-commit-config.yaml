@@ -23,6 +23,13 @@ repos:
   rev: v0.8.1
   hooks:
   - id: markdownlint-cli2
+- repo: https://github.com/lyz-code/yamlfix
+  rev: 1.13.0
+  hooks:
+  - id: yamlfix
+    types: [text]
+    files: \.yaml|\.yml|\.cff$
+    exclude: ^conda-lock.yml$
 ci:
   autofix_prs: false
   autoupdate_schedule: quarterly
