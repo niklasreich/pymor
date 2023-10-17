@@ -82,8 +82,8 @@ def weak_batch_greedy(surrogate, training_set, atol=None, rtol=None, max_extensi
     if pool:
         training_set = pool.scatter_list(training_set)
 
-    if surrogate.extension_params['method'] == 'gram_schmidt_batch':
-        surrogate.extension_params['orthogonalize'] = False
+    # if surrogate.extension_params['method'] == 'gram_schmidt_batch':
+    #     surrogate.extension_params['orthogonalize'] = False
 
     extensions = 0
     iterations = 0
