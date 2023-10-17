@@ -20,7 +20,7 @@ from pymor.discretizers.builtin.grids.referenceelements import line, square, tri
 from pymor.discretizers.builtin.grids.subgrid import SubGrid, make_sub_grid_boundary_info
 from pymor.discretizers.builtin.gui.visualizers import OnedVisualizer, PatchVisualizer
 from pymor.models.basic import InstationaryModel, StationaryModel
-from pymor.operators.constructions import ComponentProjectionOperator, LincombOperator, QuadraticFunctional
+from pymor.operators.constructions import ComponentProjectionOperator, LincombOperator
 from pymor.operators.interface import Operator
 from pymor.operators.numpy import NumpyMatrixBasedOperator, NumpyMatrixOperator
 from pymor.vectorarrays.numpy import NumpyVectorSpace
