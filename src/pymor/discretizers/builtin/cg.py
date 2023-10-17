@@ -12,17 +12,18 @@ from scipy.sparse import coo_matrix, csc_matrix
 from pymor.algorithms.preassemble import preassemble as preassemble_
 from pymor.algorithms.timestepping import ExplicitEulerTimeStepper, ImplicitEulerTimeStepper
 from pymor.analyticalproblems.elliptic import StationaryProblem
-from pymor.analyticalproblems.functions import Function, ConstantFunction, LincombFunction
+from pymor.analyticalproblems.functions import ConstantFunction, Function, LincombFunction
 from pymor.analyticalproblems.instationary import InstationaryProblem
 from pymor.discretizers.builtin.domaindiscretizers.default import discretize_domain_default
 from pymor.discretizers.builtin.grids.boundaryinfos import EmptyBoundaryInfo
-from pymor.discretizers.builtin.grids.referenceelements import line, triangle, square
-from pymor.discretizers.builtin.gui.visualizers import PatchVisualizer, OnedVisualizer
-from pymor.models.basic import StationaryModel, InstationaryModel
-from pymor.operators.constructions import LincombOperator
-from pymor.operators.numpy import NumpyMatrixBasedOperator
+from pymor.discretizers.builtin.grids.referenceelements import line, square, triangle
+from pymor.discretizers.builtin.grids.subgrid import SubGrid, make_sub_grid_boundary_info
+from pymor.discretizers.builtin.gui.visualizers import OnedVisualizer, PatchVisualizer
+from pymor.models.basic import InstationaryModel, StationaryModel
+from pymor.operators.constructions import ComponentProjectionOperator, LincombOperator, QuadraticFunctional
+from pymor.operators.interface import Operator
+from pymor.operators.numpy import NumpyMatrixBasedOperator, NumpyMatrixOperator
 from pymor.vectorarrays.numpy import NumpyVectorSpace
-
 
 LagrangeShapeFunctions = {
     line: {1: [lambda X: 1 - X[..., 0],
@@ -148,7 +149,7 @@ class BoundaryL2ProductFunctional(NumpyMatrixBasedOperator):
         NI = bi.boundaries(self.boundary_type, 1) if self.boundary_type else g.boundaries(1)
         if g.dim == 1:
             I = np.zeros(self.range.dim)
-            I[NI] = self.function(g.centers(1)[NI])
+            I[NI] = self.function(g.centers(1)[NI], mu=mu)
         else:
             F = self.function(g.centers(1)[NI], mu=mu)
             q, w = line.quadrature(order=1)
@@ -332,6 +333,7 @@ class L2ProductP1(NumpyMatrixBasedOperator):
         self.logger.info('Assemble system matrix ...')
         A = coo_matrix((SF_INTS, (SF_I0, SF_I1)), shape=(g.size(g.dim), g.size(g.dim)))
         del SF_INTS, SF_I0, SF_I1
+        A.eliminate_zeros()
         A = csc_matrix(A).copy()  # See DiffusionOperatorP1 for why copy() is necessary
 
         return A
@@ -411,6 +413,7 @@ class L2ProductQ1(NumpyMatrixBasedOperator):
         self.logger.info('Assemble system matrix ...')
         A = coo_matrix((SF_INTS, (SF_I0, SF_I1)), shape=(g.size(g.dim), g.size(g.dim)))
         del SF_INTS, SF_I0, SF_I1
+        A.eliminate_zeros()
         A = csc_matrix(A).copy()  # See DiffusionOperatorP1 for why copy() is necessary
 
         return A
@@ -509,6 +512,7 @@ class DiffusionOperatorP1(NumpyMatrixBasedOperator):
         self.logger.info('Assemble system matrix ...')
         A = coo_matrix((SF_INTS, (SF_I0, SF_I1)), shape=(g.size(g.dim), g.size(g.dim)))
         del SF_INTS, SF_I0, SF_I1
+        A.eliminate_zeros()
         A = csc_matrix(A).copy()
 
         # The call to copy() is necessary to resize the data arrays of the sparse matrix:
@@ -616,6 +620,7 @@ class DiffusionOperatorQ1(NumpyMatrixBasedOperator):
         self.logger.info('Assemble system matrix ...')
         A = coo_matrix((SF_INTS, (SF_I0, SF_I1)), shape=(g.size(g.dim), g.size(g.dim)))
         del SF_INTS, SF_I0, SF_I1
+        A.eliminate_zeros()
         A = csc_matrix(A).copy()
 
         # The call to copy() is necessary to resize the data arrays of the sparse matrix:
@@ -716,6 +721,7 @@ class AdvectionOperatorP1(NumpyMatrixBasedOperator):
         self.logger.info('Assemble system matrix ...')
         A = coo_matrix((SF_INTS, (SF_I0, SF_I1)), shape=(g.size(g.dim), g.size(g.dim)))
         del SF_INTS, SF_I0, SF_I1
+        A.eliminate_zeros()
         A = csc_matrix(A).copy()
 
         # The call to copy() is necessary to resize the data arrays of the sparse matrix:
@@ -816,6 +822,7 @@ class AdvectionOperatorQ1(NumpyMatrixBasedOperator):
         self.logger.info('Assemble system matrix ...')
         A = coo_matrix((SF_INTS, (SF_I0, SF_I1)), shape=(g.size(g.dim), g.size(g.dim)))
         del SF_INTS, SF_I0, SF_I1
+        A.eliminate_zeros()
         A = csc_matrix(A).copy()
 
         # The call to copy() is necessary to resize the data arrays of the sparse matrix:
@@ -847,8 +854,8 @@ class RobinBoundaryOperator(NumpyMatrixBasedOperator):
     boundary_info
         |BoundaryInfo| for the treatment of Dirichlet boundary conditions.
     robin_data
-        Tuple providing two |Functions| that represent the Robin parameter and boundary
-        value function. If `None`, the resulting operator is zero.
+        Tuple (c(x), g(x)) providing two |Functions| that represent the Robin parameter
+        and boundary value function. If `None`, the resulting operator is zero.
     solver_options
         The |solver_options| for the operator.
     name
@@ -881,6 +888,7 @@ class RobinBoundaryOperator(NumpyMatrixBasedOperator):
         if g.dim == 1:
             robin_c = self.robin_data[0](g.centers(1)[RI], mu=mu)
             I = coo_matrix((robin_c, (RI, RI)), shape=(g.size(g.dim), g.size(g.dim)))
+            I.eliminate_zeros()
             return csc_matrix(I).copy()
         else:
             xref = g.centers(1)[RI]
@@ -903,6 +911,7 @@ class RobinBoundaryOperator(NumpyMatrixBasedOperator):
             SF_I0 = np.repeat(g.subentities(1, g.dim)[RI], 2).ravel()
             SF_I1 = np.tile(g.subentities(1, g.dim)[RI], [1, 2]).ravel()
             I = coo_matrix((SF_INTS, (SF_I0, SF_I1)), shape=(g.size(g.dim), g.size(g.dim)))
+            I.eliminate_zeros()
             return csc_matrix(I).copy()
 
 
@@ -928,6 +937,100 @@ class InterpolationOperator(NumpyMatrixBasedOperator):
 
     def _assemble(self, mu=None):
         return self.function.evaluate(self.grid.centers(self.grid.dim), mu=mu).reshape((-1, 1))
+
+
+class NonlinearReactionOperator(Operator):
+    """ The operator is of the form::
+
+    L(u,mu)(x) = q(x, mu) * c_nl(u(x, mu), mu)
+
+    reaction_coefficient
+        The function 'q'
+    reaction_function
+        The function 'c_nl'
+    """
+    linear = False
+
+    def __init__(self, grid, boundary_info, reaction_coefficient, reaction_function, reaction_function_derivative, space_id = 'STATE', name = None):
+        self.__auto_init(locals())
+        self.source = self.range = CGVectorSpace(grid, space_id)
+
+
+    def apply(self, U, mu = None):
+        U = U.to_numpy().ravel()
+        q, w = self.grid.reference_element.quadrature(order=2)
+        SF = LagrangeShapeFunctions[self.grid.reference_element][1]
+        SF = np.array(tuple(f(q) for f in SF))
+        C = self.reaction_coefficient(self.grid.centers(0), mu=mu)
+        subentities = self.grid.subentities(0, self.grid.dim)
+        # c_nl = np.zeros(np.shape(subentities))
+        # # Damit bin ich noch nicht zufrieden!
+        # for e in range(self.grid.size(0)):
+        #     u_dofs = U[subentities[e]]
+        #     wert = np.dot(u_dofs, SF)
+        #     wert = np.reshape(wert, (3, 1))
+        #     c_nl[e] = self.reaction_function(wert, mu = mu)
+        u_dofs = U[subentities]
+        lincomb = np.dot(u_dofs, SF)
+        c_nl = self.reaction_function(lincomb.reshape(lincomb.shape + (1,)), mu=mu)
+        SF_INTS = np.einsum('ji,ei,e,e,i->ej', SF, c_nl, C, self.grid.volumes(0), w).ravel()
+
+        del C, c_nl, SF
+        # A = coo_matrix((SF_INTS, (subentities.ravel(), np.zeros_like(subentities.ravel()))),
+        #                shape=(self.grid.size(self.grid.dim), 1)).toarray().ravel()
+        A = np.zeros((self.grid.size(self.grid.dim)))
+        np.add.at(A, subentities.ravel(), SF_INTS)
+
+        del subentities, SF_INTS, u_dofs, lincomb
+
+        if self.boundary_info.has_dirichlet:
+            DI = self.boundary_info.dirichlet_boundaries(self.grid.dim)
+            A[DI] = 0
+        return self.range.make_array(A)
+
+    def jacobian(self, U, mu = None):
+        U = U.to_numpy().ravel()
+        q, w = self.grid.reference_element.quadrature(order=2)
+        SF = LagrangeShapeFunctions[self.grid.reference_element][1]
+        SF = np.array(tuple(f(q) for f in SF))
+        C = self.reaction_coefficient(self.grid.centers(0), mu=mu)
+        subentities = self.grid.subentities(0, self.grid.dim)
+        SF_I0 = np.repeat(self.grid.subentities(0, self.grid.dim), self.grid.dim + 1, axis=1).ravel()
+        SF_I1 = np.tile(self.grid.subentities(0, self.grid.dim), [1, self.grid.dim + 1]).ravel()
+        # c_nl_prime = np.zeros(np.shape(subentities))
+        # # Damit bin ich noch nicht zufrieden!
+        # for e in range(self.grid.size(0)):
+        #     u_dofs = U[subentities[e]]
+        #     wert = np.dot(u_dofs, SF)
+        #     wert = np.reshape(wert, (3, 1))
+        #     c_nl_prime[e] = self.reaction_function_derivative(wert, mu = mu)
+        u_dofs = U[subentities]
+        lincomb = np.dot(u_dofs, SF)
+        c_nl_prime = self.reaction_function_derivative(lincomb.reshape(lincomb.shape + (1,)), mu=mu)
+        SF_INTS = np.einsum('pi,qi,ei,e,e,i->epq', SF, SF, c_nl_prime, C, self.grid.volumes(0), w).ravel()
+
+        del C, c_nl_prime, SF, u_dofs, lincomb
+
+        if self.boundary_info.has_dirichlet:
+            SF_INTS = np.where(self.boundary_info.dirichlet_mask(self.grid.dim)[SF_I0], 0, SF_INTS)
+        A = coo_matrix((SF_INTS, (SF_I0, SF_I1)), shape=(self.grid.size(self.grid.dim), self.grid.size(self.grid.dim)))
+
+        A.eliminate_zeros()
+        A = csc_matrix(A).copy()
+
+        return NumpyMatrixOperator(A, source_id = self.source.id, range_id = self.range.id)
+    
+    def restricted(self, dofs):
+        source_faces = np.setdiff1d(self.grid.neighbours(2, 0)[dofs].ravel(),
+                                   np.array([-1], dtype=np.int32),
+                                   assume_unique=True)
+        sub_grid = SubGrid(self.grid, source_faces)
+        sub_boundary_info = make_sub_grid_boundary_info(sub_grid, self.grid, self.boundary_info)
+        op = self.with_(grid=sub_grid, boundary_info=sub_boundary_info, space_id=None,
+                        name=f'{self.name}_restricted')
+        sub_grid_indices = sub_grid.indices_from_parent_indices(dofs, codim=2)
+        proj = ComponentProjectionOperator(sub_grid_indices, op.range)
+        return proj @ op, sub_grid.parent_indices(2)
 
 
 def discretize_stationary_cg(analytical_problem, diameter=None, domain_discretizer=None,
@@ -984,10 +1087,8 @@ def discretize_stationary_cg(analytical_problem, diameter=None, domain_discretiz
 
     p = analytical_problem
 
-    if not (p.nonlinear_advection
+    if not (p.nonlinear_advection # noqa: E714
             == p.nonlinear_advection_derivative
-            == p.nonlinear_reaction
-            == p.nonlinear_reaction_derivative
             is None):
         raise NotImplementedError
 
@@ -1008,12 +1109,14 @@ def discretize_stationary_cg(analytical_problem, diameter=None, domain_discretiz
         ReactionOperator  = L2ProductQ1
         L2Functional = L2ProductFunctionalQ1
         BoundaryL2Functional = BoundaryL2ProductFunctional
+        L2Product = L2ProductQ1
     else:
         DiffusionOperator = DiffusionOperatorP1
         AdvectionOperator = AdvectionOperatorP1
         ReactionOperator  = L2ProductP1
         L2Functional = L2ProductFunctionalP1
         BoundaryL2Functional = BoundaryL2ProductFunctional
+        L2Product = L2ProductP1
 
     Li = [DiffusionOperator(grid, boundary_info, diffusion_constant=0, name='boundary_part')]
     if mu_energy_product:
@@ -1064,6 +1167,12 @@ def discretize_stationary_cg(analytical_problem, diameter=None, domain_discretiz
             eLi += [ReactionOperator(grid, boundary_info, coefficient_function=p.reaction, dirichlet_clear_columns=True,
                                      dirichlet_clear_diag=True)]
         coefficients.append(1.)
+    # nonlinear reaction part
+    if p.nonlinear_reaction is not None:
+        Li += [NonlinearReactionOperator(grid, boundary_info, reaction_coefficient = p.nonlinear_reaction_coefficient,
+                                         reaction_function = p.nonlinear_reaction, reaction_function_derivative = p.nonlinear_reaction_derivative, 
+                                         name = 'nonlinear_reaction')]
+        coefficients += [1.]
 
     # robin boundaries
     if p.robin_data is not None:
@@ -1116,7 +1225,7 @@ def discretize_stationary_cg(analytical_problem, diameter=None, domain_discretiz
             coefficients_F += list(p.robin_data[0].coefficients)
         else:
             Fi += [BoundaryL2Functional(grid, p.robin_data[0] * p.robin_data[1], boundary_info=boundary_info,
-                                        boundary_type='robin', dirichlet_clear_dofs=True)]
+                                        boundary_type='robin', dirichlet_clear_dofs=True, name='robin')]
             coefficients_F.append(1.)
 
     if p.dirichlet_data is not None and boundary_info.has_dirichlet:
@@ -1152,7 +1261,7 @@ def discretize_stationary_cg(analytical_problem, diameter=None, domain_discretiz
 
     # assemble additional output functionals
     if p.outputs:
-        if any(v[0] not in ('l2', 'l2_boundary') for v in p.outputs):
+        if any(v[0] not in ('l2', 'l2_boundary', 'quadratic') for v in p.outputs):
             raise NotImplementedError
         outputs = []
         for v in p.outputs:
@@ -1163,13 +1272,23 @@ def discretize_stationary_cg(analytical_problem, diameter=None, domain_discretiz
                     outputs.append(LincombOperator(ops, v[1].coefficients))
                 else:
                     outputs.append(L2Functional(grid, v[1], dirichlet_clear_dofs=False).H)
-            else:
+            elif v[0] == 'l2_boundary':
                 if isinstance(v[1], LincombFunction):
                     ops = [BoundaryL2Functional(grid, vv, dirichlet_clear_dofs=False).H
                            for vv in v[1].functions]
                     outputs.append(LincombOperator(ops, v[1].coefficients))
                 else:
                     outputs.append(BoundaryL2Functional(grid, v[1], dirichlet_clear_dofs=False).H)
+            elif v[0] == 'quadratic':
+                if isinstance(v[1], LincombFunction):
+                    ops = [
+                        QuadraticFunctional(
+                            L2Product(grid, boundary_info, dirichlet_clear_rows=False, coefficient_function=vv)
+                        ) for vv in v[1].functions]
+                    outputs.append(LincombOperator(ops, v[1].coefficients))
+                else:
+                    outputs.append(QuadraticFunctional(
+                        L2Product(grid, boundary_info, dirichlet_clear_rows=False, coefficient_function=v[1])))
         if len(outputs) > 1:
             from pymor.operators.block import BlockColumnOperator
             from pymor.operators.constructions import NumpyConversionOperator
@@ -1242,7 +1361,8 @@ def discretize_instationary_cg(analytical_problem, diameter=None, domain_discret
         intermediate vector that is calculated is returned.
     time_stepper
         The :class:`time-stepper <pymor.algorithms.timestepping.TimeStepper>`
-        to be used by :class:`~pymor.models.basic.InstationaryModel.solve`.
+        to be used by :meth:`~pymor.models.interface.Model.solve` of
+        |InstationaryModel|.
     nt
         If `time_stepper` is not specified, the number of time steps for implicit
         Euler time stepping.
@@ -1276,7 +1396,8 @@ def discretize_instationary_cg(analytical_problem, diameter=None, domain_discret
         raise NotImplementedError('Time-dependent Dirichlet values not supported.')
 
     m, data = discretize_stationary_cg(p.stationary_part, diameter=diameter, domain_discretizer=domain_discretizer,
-                                       grid_type=grid_type, grid=grid, boundary_info=boundary_info)
+                                       grid_type=grid_type, grid=grid, boundary_info=boundary_info,
+                                       preassemble=preassemble)
 
     if p.initial_data.parametric:
         I = InterpolationOperator(data['grid'], p.initial_data)
@@ -1300,7 +1421,10 @@ def discretize_instationary_cg(analytical_problem, diameter=None, domain_discret
                           num_values=num_values, name=f'{p.name}_CG')
 
     if preassemble:
-        data['unassembled_m'] = m
+        # m has preassembled stationary parts, whose unassembled version we get from data
+        ua_m = data['unassembled_m']
+        unassembled_m = m.with_(operator=ua_m.operator, rhs=ua_m.rhs, products=ua_m.products)
+        data['unassembled_m'] = unassembled_m
         m = preassemble_(m)
 
     return m, data

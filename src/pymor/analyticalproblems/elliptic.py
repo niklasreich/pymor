@@ -4,7 +4,7 @@
 
 import numpy as np
 
-from pymor.parameters.base import ParametricObject, ParameterSpace
+from pymor.parameters.base import ParameterSpace, ParametricObject
 from pymor.tools.frozendict import FrozenDict
 
 
@@ -14,7 +14,7 @@ class StationaryProblem(ParametricObject):
     The problem consists in solving ::
 
         - ∇ ⋅ [d(x, μ) ∇ u(x, μ)] + ∇ ⋅ [f_l(x, μ)u(x, μ)]
-        + ∇ ⋅ f_n(u(x, μ), μ) + c_l(x, μ) + c_n(u(x, μ), μ) = g(x, μ)
+        + ∇ ⋅ f_n(u(x, μ), μ) + c_l(x, μ) u(x, μ) + c_n(u(x, μ), μ) = g(x, μ)
 
     for u.
 
@@ -56,6 +56,8 @@ class StationaryProblem(ParametricObject):
             :l2:            Evaluate the l2-product with the given data function.
             :l2_boundary:   Evaluate the l2-product with the given data function
                             on the boundary.
+            :quadratic:     Evaluate the integral of the data function scaled by
+                            the squared solution (u, u).
     parameter_ranges
         Ranges of interest for the |Parameters| of the problem.
     name
@@ -81,7 +83,7 @@ class StationaryProblem(ParametricObject):
     def __init__(self, domain,
                  rhs=None, diffusion=None,
                  advection=None, nonlinear_advection=None, nonlinear_advection_derivative=None,
-                 reaction=None, nonlinear_reaction=None, nonlinear_reaction_derivative=None,
+                 reaction=None, nonlinear_reaction_coefficient = None, nonlinear_reaction=None, nonlinear_reaction_derivative=None,
                  dirichlet_data=None, neumann_data=None, robin_data=None, outputs=None,
                  parameter_ranges=None, name=None):
 
@@ -110,7 +112,8 @@ class StationaryProblem(ParametricObject):
                 or (isinstance(robin_data, tuple) and len(robin_data) == 2
                     and np.all([f.dim_domain == domain.dim and f.shape_range == () for f in robin_data])))
         assert (outputs is None
-                or all(isinstance(v, tuple) and len(v) == 2 and v[0] in ('l2', 'l2_boundary')
+                or all(isinstance(v, tuple) and len(v) == 2
+                       and v[0] in ('l2', 'l2_boundary', 'quadratic')
                        and v[1].dim_domain == domain.dim and v[1].shape_range == () for v in outputs))
         assert (parameter_ranges is None
                 or (isinstance(parameter_ranges, (list, tuple))
