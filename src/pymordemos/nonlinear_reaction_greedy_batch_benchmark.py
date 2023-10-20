@@ -93,9 +93,9 @@ diffusion = ConstantFunction(1,2)
 diameter = 1/36  # comparable to original paper 
 ei_snapshots = 12  # same as paper (creates 12x12 grid)
 test_snapshots = 15 # same as paper (creates 15x15 grid)
-ei_sizes = [10]#, 10, 15, 20, 25] # , 10, 15, 20, 25]  # maximum number of bases in EIM
+ei_sizes = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50]# maximum number of bases in EIM
 Nmax = 40  # corresponding maximum number of bases in RBM
-max_batchsize = 3#, 10, 15, 20, 25]
+max_batchsize = 100
 
 
 nonlinear_reaction_coefficient = ConstantFunction(1,2)
@@ -115,12 +115,8 @@ parameter_space = fom.parameters.space((0.01, 10))
 parameter_sample = parameter_space.sample_uniformly(ei_snapshots)
 test_sample = parameter_space.sample_uniformly(test_snapshots)
 
-abs_errors = [np.nan]
-rel_errors = [np.nan]
-calctimes = [np.nan]
-
-for batchsize in range(1, max_batchsize+1):
-    for i in range(len(ei_sizes)):
+for i in range(len(ei_sizes)):
+    for batchsize in range(1, max_batchsize+1):
 
         M = ei_sizes[i]
 
