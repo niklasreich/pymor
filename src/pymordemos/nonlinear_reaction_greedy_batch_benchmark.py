@@ -2,10 +2,12 @@ from time import perf_counter
 from pymor.basic import *
 from pymor.discretizers.builtin.cg import discretize_stationary_cg as discretizer
 from pymor.analyticalproblems.elliptic import StationaryProblem
+from pymor.algorithms.error import reduction_error_analysis
 from pymor.algorithms.batchgreedy import rb_batch_greedy
 import numpy as np
+import pickle
 
-def benchmark_problem(fom, parameter_sample, test_sample, M, N, batch_size):
+def benchmark_problem(fom, parameter_sample, test_sample, M, batch_size):
 
     # Training set
     nonlin_op = fom.operator.operators[2]
@@ -22,7 +24,7 @@ def benchmark_problem(fom, parameter_sample, test_sample, M, N, batch_size):
     #     if u_norm > u_max_norm: u_max_norm = u_norm
     # u_max_norm = u_max_norm.item()
 
-    tic = perf_counter()
+    #tic = perf_counter()
 
     dofs, basis, data = ei_greedy(evaluations, copy=False,
                                 error_norm=fom.l2_norm,
@@ -38,35 +40,44 @@ def benchmark_problem(fom, parameter_sample, test_sample, M, N, batch_size):
     greedy_data = rb_batch_greedy(fom, reductor, parameter_sample,
                                   use_error_estimator=False,
                                   error_norm=lambda U: np.max(fom.h1_0_semi_norm(U)),
-                                  max_extensions=N,
                                   batchsize=batch_size)
 
     rom = greedy_data['rom']
 
-    toc = perf_counter()
-    calctime = toc - tic
+    #toc = perf_counter()
+    #calctime = toc - tic
 
-    if len(reductor.bases['RB'])<N:
-        return -1, -1, -1
+    # if len(reductor.bases['RB'])<N:
+    #     return -1, -1, -1
 
     print('Testing ROM...')
 
-    max_err = -1
-    u_max_norm = -1
-    for mu in test_sample:
-        u_fom = fom.solve(mu)
-        u_rom = rom.solve(mu)
-        this_diff = u_fom - reductor.reconstruct(u_rom)
-        this_err = this_diff.norm(fom.h1_0_semi_product)[0]
-        if this_err > max_err: max_err = this_err
-        u_norm = U.norm(fom.h1_0_semi_product)
-        if u_norm > u_max_norm: u_max_norm = u_norm
+    # max_err = -1
+    # u_max_norm = -1
+    # for mu in test_sample:
+    #     u_fom = fom.solve(mu)
+    #     u_rom = rom.solve(mu)
+    #     this_diff = u_fom - reductor.reconstruct(u_rom)
+    #     this_err = this_diff.norm(fom.h1_0_semi_product)[0]
+    #     if this_err > max_err: max_err = this_err
+    #     u_norm = U.norm(fom.h1_0_semi_product)
+    #     if u_norm > u_max_norm: u_max_norm = u_norm
 
-    rel_err = max_err.item()/u_max_norm.item()
+    # rel_err = max_err.item()/u_max_norm.item()
 
-    print(f'\nBenchmark done for M={M} and N={N}.\n')
+    results = reduction_error_analysis(rom,
+                                       fom=fom,
+                                       reductor=reductor,
+                                       error_estimator=False,
+                                       error_norms=(fom.h1_0_semi_norm, fom.l2_norm),
+                                       test_mus=test_sample,
+                                       basis_sizes=0,
+                                       pool=None
+                                       )
 
-    return max_err, rel_err, calctime
+    print(f'\nBenchmark done for M={M}.\n')
+
+    return results
 
 
 set_log_levels({'pymor': 'INFO'})
@@ -79,9 +90,9 @@ diffusion = ConstantFunction(1,2)
 diameter = 1/36  # comparable to original paper 
 ei_snapshots = 12  # same as paper (creates 12x12 grid)
 test_snapshots = 15 # same as paper (creates 15x15 grid)
-ei_sizes = [5]#, 10, 15, 20, 25] # , 10, 15, 20, 25]  # maximum number of bases in EIM
+ei_sizes = [10]#, 10, 15, 20, 25] # , 10, 15, 20, 25]  # maximum number of bases in EIM
 Nmax = 40  # corresponding maximum number of bases in RBM
-batchsizes = [5]#, 10, 15, 20, 25]
+max_batchsize = 3#, 10, 15, 20, 25]
 
 
 nonlinear_reaction_coefficient = ConstantFunction(1,2)
@@ -105,25 +116,14 @@ abs_errors = [np.nan]
 rel_errors = [np.nan]
 calctimes = [np.nan]
 
-for j in range(len(batchsizes)):
-    batch_size = batchsizes[j]
+for batchsize in range(1, max_batchsize+1):
     for i in range(len(ei_sizes)):
-        for N in range(1,Nmax):
 
-            M = ei_sizes[i]
+        M = ei_sizes[i]
 
-            this_abs_err, this_rel_err, this_calctime = benchmark_problem(fom, parameter_sample, test_sample, M, N, batch_size)
-
-            if this_abs_err==-1: break
-
-            abs_errors.append(this_abs_err)
-            rel_errors.append(this_rel_err)
-            calctimes.append(this_calctime)
-
-        np.savetxt(f"benchmark_BS{batch_size}_M{M}_abs_errors.csv", abs_errors, delimiter=",")
-        np.savetxt(f"benchmark_BS{batch_size}_M{M}_rel_errors.csv", rel_errors, delimiter=",")
-        np.savetxt(f"benchmark_BS{batch_size}_M{M}_calctimes.csv", calctimes, delimiter=",")
-#np.savetxt(f"benchmark_M.csv", ei_sizes, delimiter=",")
+        results = benchmark_problem(fom, parameter_sample, test_sample, M, batchsize)
+        with open(f'benchmark_batch_nonlinear_reaction_M{M}_BS{batchsize}.pkl', 'wb') as fp:
+            pickle.dump(results, fp)
 
 
 
