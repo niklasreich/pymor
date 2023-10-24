@@ -74,6 +74,9 @@ def benchmark_problem(fom, parameter_sample, test_sample, M, batch_size):
                                        basis_sizes=0,
                                        pool=None
                                        )
+    
+    results['num_extensions'] = greedy_data['extensions']
+    results['num_iterations'] = greedy_data['iterations']
 
     print(f'\nBenchmark done for M={M}.\n')
 
