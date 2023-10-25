@@ -78,6 +78,10 @@ def benchmark_problem(fom, parameter_sample, test_sample, M, batch_size):
     results['num_extensions'] = greedy_data['extensions']
     results['num_iterations'] = greedy_data['iterations']
 
+    results['val_time'] = results['time']  # Specify what time is saved
+    results.pop('time', None)  # Delete old key
+    results['calc_time'] = greedy_data['time'] # Also save offline time
+
     print(f'\nBenchmark done for M={M}.\n')
 
     return results
