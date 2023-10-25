@@ -27,10 +27,18 @@ from os.path import isfile
 # plt.show()
 
 M=10
-max_batchsize = 5
+plot_batches = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 30, 30, 50]
+max_batchsize = 50
 
 calctimes = []
 batchsizes = []
+
+plt.subplot(121)
+if len(plot_batches)==0:
+    plot_this_batch = np.ones(max_batchsize+1)
+else:
+    plot_this_batch = np.zeros(max_batchsize+1)
+    plot_this_batch[plot_batches] = 1
 
 for bs in range(1, max_batchsize+1):
 
@@ -40,8 +48,8 @@ for bs in range(1, max_batchsize+1):
         with open(file_string, 'rb') as f:
             results = load(f)
         
-        plt.subplot(121)
-        plt.semilogy(results['max_rel_errors'][0],'x:',label=f'$bs={bs}$')
+        if plot_this_batch[bs]:
+            plt.semilogy(results['max_rel_errors'][0],'x:',label=f'$bs={bs}$')
 
         calctimes.append(results['time'])
         batchsizes.append(bs)
@@ -54,7 +62,7 @@ plt.ylabel('Calculation time in [$s$]')
 
 plt.suptitle(f'Results for M={M}.')
 plt.subplot(121)
-plt.xlabel('Reduced basis size $N$')
+plt.xlabel('Final reduced basis size $N$')
 plt.ylabel('Max rel. error in $H^1_0$ semi norm')
 plt.legend(loc =1)
 
