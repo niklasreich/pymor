@@ -13,10 +13,10 @@ diffusion = ConstantFunction(1,2)
 
 diameter = 1/36  # comparable to original paper 
 ei_snapshots = 12  # same as paper (creates 12x12 grid)
-ei_size = 25  # maximum number of bases in EIM
+ei_size = 20  # maximum number of bases in EIM
 rb_size = 45  # maximum number of bases in RBM
 test_snapshots = 15 # same as paper (creates 15x15 grid)
-batchsize = 5
+batchsize = 30
 
 nonlinear_reaction_coefficient = ConstantFunction(1,2)
 test_nonlinearreaction = ExpressionFunction('reaction[0] * (exp(reaction[1] * u[0]) - 1) / reaction[1]', dim_domain = 1, parameters = parameters, variable = 'u')
@@ -65,7 +65,8 @@ greedy_data = rb_batch_greedy(fom, reductor, parameter_sample,
                               use_error_estimator=False,
                               error_norm=lambda U: np.max(fom.h1_0_semi_norm(U)),
                               max_extensions=rb_size,
-                              batchsize=batchsize)
+                              batchsize=batchsize,
+                              postprocessing=True)
 
 rom = greedy_data['rom']
 
