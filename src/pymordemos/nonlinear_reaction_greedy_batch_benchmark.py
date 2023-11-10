@@ -41,7 +41,8 @@ def benchmark_problem(fom, parameter_sample, test_sample, M, batch_size):
                                   use_error_estimator=False,
                                   error_norm=lambda U: np.max(fom.h1_0_semi_norm(U)),
                                   rtol=1e-5,
-                                  batchsize=batch_size)
+                                  batchsize=batch_size,
+                                  postprocessing=True)
 
     rom = greedy_data['rom']
 
@@ -98,7 +99,13 @@ diffusion = ConstantFunction(1,2)
 diameter = 1/36  # comparable to original paper 
 ei_snapshots = 12  # same as paper (creates 12x12 grid)
 test_snapshots = 15 # same as paper (creates 15x15 grid)
+<<<<<<< HEAD
 ei_sizes = [20, 25, 30, 35, 40, 45, 50]# maximum number of bases in EIM
+||||||| parent of d5a955e45 (first version of postprocessing)
+ei_sizes = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50]# maximum number of bases in EIM
+=======
+ei_sizes = [20, 25, 30]# maximum number of bases in EIM
+>>>>>>> d5a955e45 (first version of postprocessing)
 Nmax = 40  # corresponding maximum number of bases in RBM
 max_batchsize = 30
 
