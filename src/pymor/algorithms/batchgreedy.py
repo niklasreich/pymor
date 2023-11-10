@@ -15,7 +15,7 @@ from pymor.parallel.interface import RemoteObject
 
 
 def weak_batch_greedy(surrogate, training_set, atol=None, rtol=None, max_extensions=None, pool=None,
-                      batchsize=None, greedy_start=None, parallel_batch=False):
+                      batchsize=None, greedy_start=None, parallel_batch=False, postprocessing=False):
     """Weak greedy basis generation algorithm :cite:`BCDDPW11`.
 
     This algorithm generates an approximation basis for a given set of vectors
@@ -91,6 +91,7 @@ def weak_batch_greedy(surrogate, training_set, atol=None, rtol=None, max_extensi
     max_err_mus_ext = []
     max_errs_iter = []
     max_err_mus_iter = []
+    appended_mus = []
 
     stopped = False
     while not stopped:
@@ -183,6 +184,7 @@ def weak_batch_greedy(surrogate, training_set, atol=None, rtol=None, max_extensi
                         # else:
                         #     surrogate.extension_params['orthogonalize'] = False
                         surrogate.extend(this_i_mus[i])
+                        appended_mus.append(this_i_mus[i])
                         stopped = False
                     except ExtensionError:
                         logger.info('This extension failed. Still trying other extensions from the batch.')
@@ -197,6 +199,35 @@ def weak_batch_greedy(surrogate, training_set, atol=None, rtol=None, max_extensi
             logger.info(f'Maximum number of {max_extensions} extensions reached.')
             stopped = True
             break
+
+    if postprocessing:
+        logger.info(f'Postprocessing...')
+        N_start = surrogate.rom.solution_space.dim
+        N_old = N_start
+        N_new = N_old - 1
+        while N_new >=1:
+            mu = appended_mus[N_new]
+            rom_old = surrogate.reductor.reduce(N_old)
+            rom_new = surrogate.reductor.reduce(N_new)
+            result_old = rom_old.compute(solution=True, mu=mu)
+            result_new = rom_new.compute(solution=True, mu=mu)
+            u_old = surrogate.reductor.reconstruct(result_old['solution'])
+            u_new = surrogate.reductor.reconstruct(result_new['solution'])
+            # fom_u = surrogate.fom.solve(mu=mu)
+            # err_old = surrogate.error_norm(u_old - fom_u)/ surrogate.error_norm(fom_u)
+            # err_new = surrogate.error_norm(u_new - fom_u)/ surrogate.error_norm(fom_u)
+            err_uu = surrogate.error_norm(u_old - u_new)/ surrogate.error_norm(u_old)
+
+            if err_uu > 1e-7:
+                break
+
+            N_old -= 1
+            N_new -= 1
+
+        surrogate.rom = rom_old
+        logger.info(f'Size of reduced basis cut from {N_start} to {N_old}')
+
+
 
     tictoc = time.perf_counter() - tic
     logger.info(f'Greedy search took {tictoc} seconds')
@@ -240,7 +271,7 @@ class WeakGreedySurrogate(BasicObject):
 
 def rb_batch_greedy(fom, reductor, training_set, use_error_estimator=True, error_norm=None,
                     atol=None, rtol=None, max_extensions=None, extension_params=None, pool=None,
-                    batchsize=None, greedy_start=None, parallel_batch=False):
+                    batchsize=None, greedy_start=None, parallel_batch=False, postprocessing=False):
     """Weak Greedy basis generation using the RB approximation error as surrogate.
 
     This algorithm generates a reduced basis using the :func:`weak greedy <weak_greedy>`
@@ -298,7 +329,8 @@ def rb_batch_greedy(fom, reductor, training_set, use_error_estimator=True, error
     surrogate = RBSurrogate(fom, reductor, use_error_estimator, error_norm, extension_params, pool or dummy_pool)
 
     result = weak_batch_greedy(surrogate, training_set, atol=atol, rtol=rtol, max_extensions=max_extensions, pool=pool,
-                               batchsize=batchsize, greedy_start=greedy_start, parallel_batch=parallel_batch)
+                               batchsize=batchsize, greedy_start=greedy_start, parallel_batch=parallel_batch,
+                               postprocessing=postprocessing)
     result['rom'] = surrogate.rom
 
     return result
