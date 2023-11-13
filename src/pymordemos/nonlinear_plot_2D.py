@@ -26,14 +26,17 @@ from os.path import isfile
 
 # plt.show()
 
-M=10
-plot_batches = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 30, 30, 50]
+M=20
+plot_batches = [1, 2, 3, 4, 5, 30]
 max_batchsize = 50
 
-calctimes = []
+calc_times = []
+val_times = []
+num_ext = []
+num_iter = []
 batchsizes = []
 
-plt.subplot(121)
+plt.subplot(221)
 if len(plot_batches)==0:
     plot_this_batch = np.ones(max_batchsize+1)
 else:
@@ -42,29 +45,56 @@ else:
 
 for bs in range(1, max_batchsize+1):
 
-    file_string = f'benchmark_batch_nonlinear_reaction_M{M}_BS{bs}.pkl'
+    file_string = f'bm_nonlin_reac_M{M}_BS{bs}.pkl'
 
     if isfile(file_string):
         with open(file_string, 'rb') as f:
             results = load(f)
         
         if plot_this_batch[bs]:
+            plt.subplot(221)
             plt.semilogy(results['max_rel_errors'][0],'x:',label=f'$bs={bs}$')
+            plt.subplot(224)
+            plt.semilogy(results['max_rel_errors'][0][1:]/results['max_rel_errors'][0][:-1],'x:',label=f'$bs={bs}$')
 
-        calctimes.append(results['time'])
+        calc_times.append(results['calc_time'])
+        val_times.append(results['val_time'])
+        num_ext.append(results['num_extensions'])
+        num_iter.append(results['num_iterations'])
         batchsizes.append(bs)
 
 
-plt.subplot(122)
-plt.plot(batchsizes, calctimes, 'x:')
-plt.xlabel('batch size $b$')
-plt.ylabel('Calculation time in [$s$]')
+plt.subplot(222)
+plt.plot(batchsizes, calc_times, 'o:')
+plt.xlabel('Batch size $b$')
+plt.ylabel('Offline greedy time in [$s$]')
+plt.grid()
+
+plt.subplot(223)
+plt.plot(batchsizes, num_ext, 'o:', label='Final basis size $N$')
+plt.plot(batchsizes, num_iter, 'o:', label='# greedy iterations')
+plt.xlabel('Batch size $b$')
+plt.legend(loc=0)
+plt.grid()
+
+# plt.subplot(224)
+# plt.plot(batchsizes, val_times, 'o:')
+# plt.xlabel('Batch size $b$')
+# plt.ylabel('Validation time in [$s$]')
+# plt.grid()
+
+plt.subplot(224)
+plt.xlabel('Reduced basis size $N$')
+plt.ylabel('Quotient')
+plt.legend(loc =1)
+plt.grid()
 
 plt.suptitle(f'Results for M={M}.')
-plt.subplot(121)
-plt.xlabel('Final reduced basis size $N$')
+plt.subplot(221)
+plt.xlabel('Reduced basis size $N$')
 plt.ylabel('Max rel. error in $H^1_0$ semi norm')
 plt.legend(loc =1)
+plt.grid()
 
 plt.show()
 
