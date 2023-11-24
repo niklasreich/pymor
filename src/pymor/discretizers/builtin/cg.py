@@ -16,7 +16,7 @@ from pymor.analyticalproblems.functions import ConstantFunction, Function, Linco
 from pymor.analyticalproblems.instationary import InstationaryProblem
 from pymor.discretizers.builtin.domaindiscretizers.default import discretize_domain_default
 from pymor.discretizers.builtin.grids.boundaryinfos import EmptyBoundaryInfo
-from pymor.discretizers.builtin.grids.referenceelements import line, square, triangle
+from pymor.discretizers.builtin.grids.referenceelements import line, square, triangle, Triangle
 from pymor.discretizers.builtin.grids.subgrid import SubGrid, make_sub_grid_boundary_info
 from pymor.discretizers.builtin.gui.visualizers import OnedVisualizer, PatchVisualizer
 from pymor.models.basic import InstationaryModel, StationaryModel
@@ -952,6 +952,8 @@ class NonlinearReactionOperator(Operator):
     linear = False
 
     def __init__(self, grid, boundary_info, reaction_coefficient, reaction_function, reaction_function_derivative, space_id = 'STATE', name = None):
+        if not isinstance(grid.reference_element,Triangle):
+            raise NotImplementedError
         self.__auto_init(locals())
         self.source = self.range = CGVectorSpace(grid, space_id)
 
@@ -959,7 +961,8 @@ class NonlinearReactionOperator(Operator):
     def apply(self, U, mu = None):
         U = U.to_numpy().ravel()
         q, w = self.grid.reference_element.quadrature(order=2)
-        SF = LagrangeShapeFunctions[self.grid.reference_element][1]
+        # SF = LagrangeShapeFunctions[self.grid.reference_element][1]
+        SF = LagrangeShapeFunctions[triangle][1] # HOTFIX!
         SF = np.array(tuple(f(q) for f in SF))
         C = self.reaction_coefficient(self.grid.centers(0), mu=mu)
         subentities = self.grid.subentities(0, self.grid.dim)
@@ -975,13 +978,13 @@ class NonlinearReactionOperator(Operator):
         c_nl = self.reaction_function(lincomb.reshape(lincomb.shape + (1,)), mu=mu)
         SF_INTS = np.einsum('ji,ei,e,e,i->ej', SF, c_nl, C, self.grid.volumes(0), w).ravel()
 
-        del C, c_nl, SF
+        # del C, c_nl, SF
         # A = coo_matrix((SF_INTS, (subentities.ravel(), np.zeros_like(subentities.ravel()))),
         #                shape=(self.grid.size(self.grid.dim), 1)).toarray().ravel()
         A = np.zeros((self.grid.size(self.grid.dim)))
         np.add.at(A, subentities.ravel(), SF_INTS)
 
-        del subentities, SF_INTS, u_dofs, lincomb
+        # del subentities, SF_INTS, u_dofs, lincomb
 
         if self.boundary_info.has_dirichlet:
             DI = self.boundary_info.dirichlet_boundaries(self.grid.dim)
@@ -991,7 +994,8 @@ class NonlinearReactionOperator(Operator):
     def jacobian(self, U, mu = None):
         U = U.to_numpy().ravel()
         q, w = self.grid.reference_element.quadrature(order=2)
-        SF = LagrangeShapeFunctions[self.grid.reference_element][1]
+        # SF = LagrangeShapeFunctions[self.grid.reference_element][1]
+        SF = LagrangeShapeFunctions[triangle][1] # HOTFIX!
         SF = np.array(tuple(f(q) for f in SF))
         C = self.reaction_coefficient(self.grid.centers(0), mu=mu)
         subentities = self.grid.subentities(0, self.grid.dim)
@@ -1009,7 +1013,7 @@ class NonlinearReactionOperator(Operator):
         c_nl_prime = self.reaction_function_derivative(lincomb.reshape(lincomb.shape + (1,)), mu=mu)
         SF_INTS = np.einsum('pi,qi,ei,e,e,i->epq', SF, SF, c_nl_prime, C, self.grid.volumes(0), w).ravel()
 
-        del C, c_nl_prime, SF, u_dofs, lincomb
+        # del C, c_nl_prime, SF, u_dofs, lincomb
 
         if self.boundary_info.has_dirichlet:
             SF_INTS = np.where(self.boundary_info.dirichlet_mask(self.grid.dim)[SF_I0], 0, SF_INTS)
