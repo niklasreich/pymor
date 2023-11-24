@@ -12,10 +12,11 @@ from pymor.core.exceptions import ExtensionError
 from pymor.core.logger import getLogger
 from pymor.parallel.dummy import dummy_pool
 from pymor.parallel.interface import RemoteObject
+from pymor.parallel.manager import RemoteObjectManager
 
 
 def weak_batch_greedy(surrogate, training_set, atol=None, rtol=None, max_extensions=None, pool=None,
-                      batchsize=None, greedy_start=None, parallel_batch=False, postprocessing=False):
+                      batchsize=None, greedy_start=None, postprocessing=False):
     """Weak greedy basis generation algorithm :cite:`BCDDPW11`.
 
     This algorithm generates an approximation basis for a given set of vectors
@@ -73,14 +74,15 @@ def weak_batch_greedy(surrogate, training_set, atol=None, rtol=None, max_extensi
         return {'max_errs': [], 'max_err_mus': [], 'extensions': 0,
                 'time': time.perf_counter() - tic}
 
+    parallel_batch = False 
     if pool is None:
         pool = dummy_pool
     elif pool is not dummy_pool:
         logger.info(f'Using pool of {len(pool)} workers for parallel greedy search.')
+        parallel_batch = True
 
     # Distribute the training set evenly among the workers.
-    if pool:
-        training_set = pool.scatter_list(training_set)
+    training_set_rank = pool.scatter_list(training_set)
 
     # if surrogate.extension_params['method'] == 'gram_schmidt_batch':
     #     surrogate.extension_params['orthogonalize'] = False
@@ -97,7 +99,7 @@ def weak_batch_greedy(surrogate, training_set, atol=None, rtol=None, max_extensi
     while not stopped:
         with logger.block('Estimating errors ...'):
             # max_err, max_err_mu = surrogate.evaluate(training_set)
-            this_i_errs = surrogate.evaluate(training_set, return_all_values=True)
+            this_i_errs = surrogate.evaluate(training_set_rank, return_all_values=True)
             this_i_mus = []
             if (extensions == 0) and (iterations == 0):
                 if greedy_start == 'minmax':
@@ -271,7 +273,7 @@ class WeakGreedySurrogate(BasicObject):
 
 def rb_batch_greedy(fom, reductor, training_set, use_error_estimator=True, error_norm=None,
                     atol=None, rtol=None, max_extensions=None, extension_params=None, pool=None,
-                    batchsize=None, greedy_start=None, parallel_batch=False, postprocessing=False):
+                    batchsize=None, greedy_start=None, postprocessing=False):
     """Weak Greedy basis generation using the RB approximation error as surrogate.
 
     This algorithm generates a reduced basis using the :func:`weak greedy <weak_greedy>`
@@ -329,8 +331,7 @@ def rb_batch_greedy(fom, reductor, training_set, use_error_estimator=True, error
     surrogate = RBSurrogate(fom, reductor, use_error_estimator, error_norm, extension_params, pool or dummy_pool)
 
     result = weak_batch_greedy(surrogate, training_set, atol=atol, rtol=rtol, max_extensions=max_extensions, pool=pool,
-                               batchsize=batchsize, greedy_start=greedy_start, parallel_batch=parallel_batch,
-                               postprocessing=postprocessing)
+                               batchsize=batchsize, greedy_start=greedy_start, postprocessing=postprocessing)
     result['rom'] = surrogate.rom
 
     return result
@@ -389,32 +390,42 @@ class RBSurrogate(WeakGreedySurrogate):
         with self.logger.block('Reducing ...'):
             self.rom = self.reductor.reduce()
 
-    def extend_parallel(self, mus):  # TODO: Anpassung auf Uebergabe gesamter Batch
+
+    def extend_parallel(self, mus):
+
         # U = np.empty(len(mus), dtype=np.object)
-        with self.logger.block(f'Computing solution snapshots for current batch in parallel ...'):
-            with mp.Pool(processes=min(mp.cpu_count(), len(mus))) as mp_pool:
-                U = mp_pool.map(self.fom.solve, mus)
-                # U = self.fom.solve(mu)
+        # with RemoteObjectManager() as reobma:
+            #with self.logger.block(f'Computing solution snapshots for current batch in parallel ...'):
+        def _parallel_solve(mu, fom=None, evaluations=None):
+            U = fom.solve(mu)
+            evaluations.append(U)
+
+        #U = reobma.manage(self.pool.push(self.fom.solution_space.empty()))
+        #self.pool.map(_parallel_solve, mus, fom=self.fom, evaluations=U)
+        U = self.fom.solution_space.empty()
+        self.pool.map(_parallel_solve, mus, fom=self.fom, evaluations=U)
         add = 0
         stopped = True
-        for i in range(len(mus)):
-            extension_params = self.extension_params
-            with self.logger.block(f'Extending basis with solution snapshot {i} of batch...'):
-                # if len(U) > 1:
-                #     if extension_params is None:
-                #        extension_params = {'method': 'pod'}
-                #     else:
-                #         extension_params.setdefault('method', 'pod')
-                try:
-                    self.reductor.extend_basis(U[i], copy_U=False, **(extension_params or {}))
-                    stopped = False
-                    add += 1
-                except ExtensionError:
-                    self.logger.info('This extension failed. Still trying other extensions from the batch.')
-                if not self.use_error_estimator:
-                    self.remote_reductor = self.pool.push(self.reductor)
-            with self.logger.block('Reducing ...'):
-                self.rom = self.reductor.reduce()
+        #for i in range(len(mus)):
+        extension_params = self.extension_params
+        with self.logger.block(f'Extending basis with solution snapshots of batch...'):
+            # if len(U) > 1:
+            #     if extension_params is None:
+            #        extension_params = {'method': 'pod'}
+            #     else:
+            #         extension_params.setdefault('method', 'pod')
+            old_size = self.rom.order
+            try:
+
+                self.reductor.extend_basis(U, copy_U=False, **(extension_params or {}))
+                stopped = False
+            except ExtensionError:
+                self.logger.info('This extension failed. Still trying other extensions from the batch.')
+            if not self.use_error_estimator:
+                self.remote_reductor = self.pool.push(self.reductor)
+        with self.logger.block('Reducing ...'):
+            self.rom = self.reductor.reduce()
+        add = self.rom.order - old_size
         return add, stopped
 
 
