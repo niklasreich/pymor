@@ -74,12 +74,13 @@ def weak_batch_greedy(surrogate, training_set, atol=None, rtol=None, max_extensi
         return {'max_errs': [], 'max_err_mus': [], 'extensions': 0,
                 'time': time.perf_counter() - tic}
 
-    parallel_batch = False 
+    # parallel_batch = False 
     if pool is None:
         pool = dummy_pool
     elif pool is not dummy_pool:
         logger.info(f'Using pool of {len(pool)} workers for parallel greedy search.')
-        parallel_batch = True
+    # Always use parallel extension of basis by batch
+    parallel_batch = True
 
     # Distribute the training set evenly among the workers.
     training_set_rank = pool.scatter_list(training_set)
@@ -400,8 +401,6 @@ class RBSurrogate(WeakGreedySurrogate):
             U = fom.solve(mu)
             evaluations.append(U)
 
-        #U = reobma.manage(self.pool.push(self.fom.solution_space.empty()))
-        #self.pool.map(_parallel_solve, mus, fom=self.fom, evaluations=U)
         U = self.fom.solution_space.empty()
         self.pool.map(_parallel_solve, mus, fom=self.fom, evaluations=U)
         add = 0
@@ -409,11 +408,11 @@ class RBSurrogate(WeakGreedySurrogate):
         #for i in range(len(mus)):
         extension_params = self.extension_params
         with self.logger.block(f'Extending basis with solution snapshots of batch...'):
-            # if len(U) > 1:
-            #     if extension_params is None:
-            #        extension_params = {'method': 'pod'}
-            #     else:
-            #         extension_params.setdefault('method', 'pod')
+            if len(U) > 1:
+                if extension_params is None:
+                    extension_params = {'method': 'pod'}
+                else:
+                    extension_params.setdefault('method', 'pod')
             old_size = self.rom.order
             try:
 
