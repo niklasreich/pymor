@@ -3,6 +3,7 @@ from pymor.discretizers.builtin.cg import discretize_stationary_cg as discretize
 from pymor.analyticalproblems.elliptic import StationaryProblem
 from pymor.algorithms.batchgreedy import rb_batch_greedy
 from pymor.parallel.default import new_parallel_pool, dummy_pool
+from pymor.parallel.mpi import MPIPool
 import numpy as np
 from mpi4py import MPI
 
@@ -59,26 +60,41 @@ parameter_sample = parameter_space.sample_uniformly(ei_snapshots)
 nonlin_op = fom.operator.operators[2]
 #evaluations = pool.map(_eval_nonlin_op, parameter_sample, fom=fom)
 
+if pool is not dummy_pool:
+    with RemoteObjectManager() as reobma:
+        evaluations = reobma.manage(pool.push(nonlin_op.range.empty()))
+        pool.map(_interpolate_operator_build_evaluations, parameter_sample,
+                fom=fom, operator=nonlin_op, evaluations=evaluations)
 
+        # Test set
+        test_sample = parameter_space.sample_uniformly(test_snapshots)
+        test_norms = list(zip(*pool.map(_test_set_norm, test_sample, fom=fom)))
+        u_max_norm = np.max(test_norms)
+        u_max_norm = u_max_norm.item()
 
-evaluations = nonlin_op.range.empty()
-pool.map(_interpolate_operator_build_evaluations, parameter_sample,
-         fom=fom, operator=nonlin_op, evaluations=evaluations)
-# for mu in parameter_sample:
-#     U = fom.solve(mu)
-#     evaluations.append(nonlin_op.apply(U, mu=mu))
+        dofs, basis, data = ei_greedy(evaluations, copy=False,
+                                    error_norm=fom.l2_norm,
+                                    max_interpolation_dofs=ei_size,
+                                    pool=pool)
+else:
+    evaluations = nonlin_op.range.empty()
+    for mu in parameter_sample:
+        U = fom.solve(mu)
+        evaluations.append(nonlin_op.apply(U, mu=mu))
 
+    # Test set
+    test_sample = parameter_space.sample_uniformly(test_snapshots)
+    test_norms = []
+    for mu in test_sample:
+        U = fom.solve(mu)
+        test_norms.append(U.norm(fom.h1_0_semi_product))
+    u_max_norm = np.max(test_norms)
+    u_max_norm = u_max_norm.item()
 
-# Test set
-test_sample = parameter_space.sample_uniformly(test_snapshots)
-test_norms = list(zip(*pool.map(_test_set_norm, test_sample, fom=fom)))
-u_max_norm = np.max(test_norms)
-u_max_norm = u_max_norm.item()
-
-dofs, basis, data = ei_greedy(evaluations, copy=False,
-                            error_norm=fom.l2_norm,
-                            max_interpolation_dofs=ei_size,
-                            pool=pool)
+    dofs, basis, data = ei_greedy(evaluations, copy=False,
+                                error_norm=fom.l2_norm,
+                                max_interpolation_dofs=ei_size,
+                                pool=pool)
 ei_op = EmpiricalInterpolatedOperator(nonlin_op, dofs, basis, triangular=True)  #False for DEIM
 new_ops = [ei_op if i == 2 else op for i, op in enumerate(fom.operator.operators)]
 fom_ei = fom.with_(operator=fom.operator.with_(operators=new_ops))
