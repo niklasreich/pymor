@@ -1,6 +1,6 @@
 import time
 import pickle
-from typer import run
+from typer import Option, run
 from pymor.basic import *
 from pymor.discretizers.builtin.cg import discretize_stationary_cg as discretizer
 from pymor.analyticalproblems.elliptic import StationaryProblem
@@ -11,7 +11,9 @@ import numpy as np
 from mpi4py import MPI
 
 
-def main():
+def main(
+    batchsize: int = Option(0, help='Size of batch. If 0, the size of WorkerPool is used.')
+    ):
     # mpi_comm = MPI.COMM_WORLD
     # mpi_rank = mpi_comm.Get_rank()
 
@@ -28,12 +30,14 @@ def main():
     else:
         print(f'No functional pool. Only dummy_pool is used.')
 
+    assert batchsize>0, 'Batch size must be nonnegative.'
+    if batchsize==0: batchsize = len(pool)
+
     diameter = 1/36  # comparable to original paper 
     ei_snapshots = 12  # same as paper (creates 12x12 grid)
     ei_size = 20  # maximum number of bases in EIM
     rb_size = 45  # maximum number of bases in RBM
     test_snapshots = 15 # same as paper (creates 15x15 grid)
-    batchsize = len(pool)
 
     tic = time.perf_counter()
 
