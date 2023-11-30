@@ -26,6 +26,8 @@ from os.path import isfile
 
 # plt.show()
 
+# plt.switch_backend('QtaAgg')
+
 M=20
 plot_batches = [1, 2, 3, 4, 5, 30]
 max_batchsize = 50
@@ -45,7 +47,7 @@ else:
 
 for bs in range(1, max_batchsize+1):
 
-    file_string = f'bm_nonlin_reac_M{M}_BS{bs}.pkl'
+    file_string = f'bm_nonlin_reac_N{bs}_M{M}_BS{bs}.pkl'
 
     if isfile(file_string):
         with open(file_string, 'rb') as f:
@@ -54,8 +56,8 @@ for bs in range(1, max_batchsize+1):
         if plot_this_batch[bs]:
             plt.subplot(221)
             plt.semilogy(results['max_rel_errors'][0],'x:',label=f'$bs={bs}$')
-            plt.subplot(224)
-            plt.semilogy(results['max_rel_errors'][0][1:]/results['max_rel_errors'][0][:-1],'x:',label=f'$bs={bs}$')
+            # plt.subplot(224)
+            # plt.semilogy(results['max_rel_errors'][0][1:]/results['max_rel_errors'][0][:-1],'x:',label=f'$bs={bs}$')
 
         calc_times.append(results['calc_time'])
         val_times.append(results['val_time'])
@@ -77,17 +79,17 @@ plt.xlabel('Batch size $b$')
 plt.legend(loc=0)
 plt.grid()
 
-# plt.subplot(224)
-# plt.plot(batchsizes, val_times, 'o:')
-# plt.xlabel('Batch size $b$')
-# plt.ylabel('Validation time in [$s$]')
-# plt.grid()
-
 plt.subplot(224)
-plt.xlabel('Reduced basis size $N$')
-plt.ylabel('Quotient')
-plt.legend(loc =1)
+plt.plot(batchsizes, val_times, 'o:')
+plt.xlabel('Batch size $b$')
+plt.ylabel('Validation time in [$s$]')
 plt.grid()
+
+# plt.subplot(224)
+# plt.xlabel('Reduced basis size $N$')
+# plt.ylabel('Quotient')
+# plt.legend(loc =1)
+# plt.grid()
 
 plt.suptitle(f'Results for M={M}.')
 plt.subplot(221)
