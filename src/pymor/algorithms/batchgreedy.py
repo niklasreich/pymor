@@ -13,6 +13,8 @@ from pymor.core.logger import getLogger
 from pymor.parallel.dummy import dummy_pool
 from pymor.parallel.interface import RemoteObject
 from pymor.parallel.manager import RemoteObjectManager
+from pymor.parallel.mpi import MPIPool
+from mpi4py import MPI
 
 
 def weak_batch_greedy(surrogate, training_set, atol=None, rtol=None, max_extensions=None, pool=None,
@@ -74,11 +76,14 @@ def weak_batch_greedy(surrogate, training_set, atol=None, rtol=None, max_extensi
         return {'max_errs': [], 'max_err_mus': [], 'extensions': 0,
                 'time': time.perf_counter() - tic}
 
-    # parallel_batch = False 
+    # parallel_batch = False
+    allow_mpi = False
     if pool is None:
         pool = dummy_pool
     elif pool is not dummy_pool:
         logger.info(f'Using pool of {len(pool)} workers for parallel greedy search.')
+        if isinstance(pool, MPIPool):
+            allow_mpi = True
     # Always use parallel extension of basis by batch
     parallel_batch = True
 
@@ -176,7 +181,7 @@ def weak_batch_greedy(surrogate, training_set, atol=None, rtol=None, max_extensi
         stopped = True
         if parallel_batch:
             with logger.block(f'Extending in parallel...'):
-                add, stopped = surrogate.extend_parallel(this_i_mus)
+                add, stopped = surrogate.extend_parallel(this_i_mus, allow_mpi=allow_mpi)
                 extensions += add
         else:
             for i in range(batchsize):
@@ -268,7 +273,7 @@ class WeakGreedySurrogate(BasicObject):
         pass
 
     @abstractmethod
-    def extend_parallel(self, mus):
+    def extend_parallel(self, mus, allow_mpi=False):
         pass
 
 
@@ -392,27 +397,41 @@ class RBSurrogate(WeakGreedySurrogate):
             self.rom = self.reductor.reduce()
 
 
-    def extend_parallel(self, mus):
+    def extend_parallel(self, mus, allow_mpi=False):
 
-        # U = np.empty(len(mus), dtype=np.object)
-        # with RemoteObjectManager() as reobma:
+        if allow_mpi:
+
+            # mpi_comm = MPI.COMM_WORLD
+            # mpi_rank = mpi_comm.Get_rank()
+                
+            # if not isinstance(mus, RemoteObject):
+            #     mus = self.pool.scatter_list(mus)
+
+            U_temp = self.pool.apply(_parallel_mpi_solve, mus, fom=self.fom)
+            U_temp = U_temp[0]
+            U = self.fom.solution_space.empty()
+            for i in range(len(U_temp)):
+                U.append(U_temp[i])
+        else:
+            # U = np.empty(len(mus), dtype=np.object)
+            # with RemoteObjectManager() as reobma:
             #with self.logger.block(f'Computing solution snapshots for current batch in parallel ...'):
-        def _parallel_solve(mu, fom=None, evaluations=None):
-            U = fom.solve(mu)
-            evaluations.append(U)
+            def _parallel_solve(mu, fom=None, evaluations=None):
+                U = fom.solve(mu)
+                evaluations.append(U)
 
-        U = self.fom.solution_space.empty()
-        self.pool.map(_parallel_solve, mus, fom=self.fom, evaluations=U)
+            U = self.fom.solution_space.empty()
+            self.pool.map(_parallel_solve, mus, fom=self.fom, evaluations=U)
         add = 0
         stopped = True
         #for i in range(len(mus)):
         extension_params = self.extension_params
         with self.logger.block(f'Extending basis with solution snapshots of batch...'):
-            if len(U) > 1:
-                if extension_params is None:
-                    extension_params = {'method': 'pod'}
-                else:
-                    extension_params.setdefault('method', 'pod')
+            # if len(U) > 1:
+            #     if extension_params is None:
+            #         extension_params = {'method': 'pod'}
+            #     else:
+            #         extension_params.setdefault('method', 'pod')
             old_size = self.rom.order
             try:
 
@@ -449,3 +468,18 @@ def _rb_surrogate_evaluate(rom=None, fom=None, reductor=None, mus=None, error_no
     else:
         max_err_ind = np.argmax(errors)
         return errors[max_err_ind], mus[max_err_ind]
+    
+def _parallel_mpi_solve(mus, fom=None):
+    # from mpi4py import MPI
+
+    mpi_comm = MPI.COMM_WORLD
+    mpi_rank = mpi_comm.Get_rank()
+
+    # U_onrank = fom.solution_space.empty()
+    # for mu in mus:
+    #     U_onrank.append(fom.solve(mu))
+    mu = mus[mpi_rank]
+    U_onrank = fom.solve(mu)
+    # U = fom.solution_space.empty()
+    U = mpi_comm.gather(U_onrank, root=0)
+    return U
