@@ -163,6 +163,8 @@ def weak_batch_greedy(surrogate, training_set, atol=None, rtol=None, max_extensi
                 this_i_mus.append(training_set[max_ind])
                 this_i_errs[max_ind] = 0
 
+                appended_mus.append(training_set[max_ind])
+
             # max_errs.append(max_err)
             # max_err_mus.append(max_err_mu)
 
@@ -208,32 +210,34 @@ def weak_batch_greedy(surrogate, training_set, atol=None, rtol=None, max_extensi
             stopped = True
             break
 
+    max_errs_pp = []
     if postprocessing:
         logger.info(f'Postprocessing...')
+        if rtol is None: rtol = 1e-5
         N_start = surrogate.rom.solution_space.dim
-        N_old = N_start
-        N_new = N_old - 1
-        while N_new >=1:
-            mu = appended_mus[N_new]
-            rom_old = surrogate.reductor.reduce(N_old)
-            rom_new = surrogate.reductor.reduce(N_new)
-            result_old = rom_old.compute(solution=True, mu=mu)
-            result_new = rom_new.compute(solution=True, mu=mu)
-            u_old = surrogate.reductor.reconstruct(result_old['solution'])
-            u_new = surrogate.reductor.reconstruct(result_new['solution'])
-            # fom_u = surrogate.fom.solve(mu=mu)
-            # err_old = surrogate.error_norm(u_old - fom_u)/ surrogate.error_norm(fom_u)
-            # err_new = surrogate.error_norm(u_new - fom_u)/ surrogate.error_norm(fom_u)
-            err_uu = surrogate.error_norm(u_old - u_new)/ surrogate.error_norm(u_old)
-
-            if err_uu > 1e-7:
-                break
-
-            N_old -= 1
-            N_new -= 1
-
-        surrogate.rom = rom_old
-        logger.info(f'Size of reduced basis cut from {N_start} to {N_old}')
+        ref_sols = surrogate.fom.solution_space.empty()
+        ref_norms = []
+        for mu in appended_mus:
+            res_rom = surrogate.rom.compute(solution=True, mu=mu)
+            u_rom = surrogate.reductor.reconstruct(res_rom['solution'])
+            ref_sols.append(u_rom)
+            ref_norms.append(surrogate.error_norm(u_rom))
+        N_pp = N_start - 1
+        for N_pp in range(N_start-1, np.max(N_start-batchsize-1,0), -1):
+            rom_pp = surrogate.reductor.reduce(N_pp)
+            max_err = 0
+            for i in range(len(appended_mus)):
+                mu = appended_mus[i]
+                res_pp = rom_pp.compute(solution=True, mu=mu)
+                u_pp = surrogate.reductor.reconstruct(res_pp['solution'])
+                err = surrogate.error_norm(u_pp - ref_sols[i])/ref_norms[i]
+                if err>max_err: max_err = err
+            max_err = max_err.item()
+            max_errs_pp.append(max_err)
+            if max_err>0.1*rtol: break
+            
+        surrogate.rom = surrogate.reductor.reduce(N_pp+1)
+        logger.info(f'Size of reduced basis cut from {N_start} to {N_pp+1}')
 
 
 
@@ -242,7 +246,7 @@ def weak_batch_greedy(surrogate, training_set, atol=None, rtol=None, max_extensi
     return {'max_errs_iter': max_errs_iter, 'max_err_mus_iter': max_err_mus_iter,
             'max_errs_ext': max_errs_ext, 'max_err_mus_ext': max_err_mus_ext,
             'extensions': extensions, 'iterations': iterations,
-            'time': tictoc}
+            'time': tictoc, 'max_errs_pp': max_errs_pp}
 
 
 class WeakGreedySurrogate(BasicObject):
