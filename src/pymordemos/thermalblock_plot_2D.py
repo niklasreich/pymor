@@ -58,7 +58,7 @@ for p in range(1, max_P+1):
 
     for bs in range(1, max_batchsize+1):
 
-        file_string = f'bm_nonlin_reac_N{p}_M{M}_BS{bs}.pkl'
+        file_string = f'thermalblock_3x2_N{p}_BS{bs}.pkl'
 
         if isfile(file_string):
             with open(file_string, 'rb') as f:
@@ -109,7 +109,7 @@ plt.subplot(224)
 plt.plot(batchsizes, val_times, 'o:')
 #plt.plot(batchsizes_p, val_times_p, 'o:', label='mpi parallel')
 plt.xlabel('Batch size $b$')
-plt.ylabel('Online time per $\mu$ in [$s$]')
+plt.ylabel('online time per $\mu$ in [$s$]')
 plt.legend(loc=0)
 plt.grid()
 
@@ -119,16 +119,10 @@ plt.grid()
 # plt.legend(loc =1)
 # plt.grid()
 
-plt.suptitle(f'Nonlinear reaction: M={M} EIM-basis size.')
+plt.suptitle(f'3x2 Thermalblock: 9 snapshots per dim, 2665 dofs')
 plt.subplot(221)
 plt.xlabel('Reduced basis size $N$')
 plt.ylabel('Max rel. error in $H^1_0$ semi norm')
 plt.legend(loc =1)
 plt.grid()
-
 plt.show()
-
-
-
-
-

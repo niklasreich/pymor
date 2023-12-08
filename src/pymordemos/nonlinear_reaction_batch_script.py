@@ -30,7 +30,7 @@ def main(
     else:
         print(f'No functional pool. Only dummy_pool is used.')
 
-    assert batchsize>0, 'Batch size must be nonnegative.'
+    assert batchsize>=0, 'Batch size must be nonnegative.'
     if batchsize==0: batchsize = len(pool)
 
     diameter = 1/36  # comparable to original paper 
@@ -106,8 +106,9 @@ def main(
                                 use_error_estimator=False,
                                 error_norm=fom.h1_0_semi_norm,
                                 max_extensions=rb_size,
+                                rtol=1e-5,
                                 batchsize=batchsize,
-                                postprocessing=False,
+                                postprocessing=True,
                                 pool=pool)
     
     toc = time.perf_counter()
@@ -122,7 +123,7 @@ def main(
                                        error_norms=(fom.h1_0_semi_norm, fom.l2_norm),
                                        test_mus=test_sample,
                                        basis_sizes=0,
-                                       pool=None
+                                       pool=pool
                                        )
 
     # Online time
@@ -135,6 +136,7 @@ def main(
     
     results['num_extensions'] = greedy_data['extensions']
     results['num_iterations'] = greedy_data['iterations']
+    results['max_errs_pp'] = greedy_data['max_errs_pp']
 
     results['val_time'] = online_time  # Specify what time is saved
     results.pop('time', None)  # Delete old key
