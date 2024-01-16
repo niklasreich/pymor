@@ -235,7 +235,7 @@ def weak_batch_greedy(surrogate, training_set, atol=None, rtol=None, max_extensi
             max_err = max_err.item()
             max_errs_pp.append(max_err)
             if max_err>0.1*rtol: break
-            
+
         surrogate.rom = surrogate.reductor.reduce(N_pp+1)
         logger.info(f'Size of reduced basis cut from {N_start} to {N_pp+1}')
 
@@ -403,29 +403,11 @@ class RBSurrogate(WeakGreedySurrogate):
 
     def extend_parallel(self, mus, allow_mpi=False):
 
-        if allow_mpi:
+        Us = self.pool.map(_parallel_solve, mus, fom=self.fom)
+        U, Us = Us[0], Us[1:]
+        for UU in Us:
+            U.append(UU, remove_from_other=True)
 
-            # mpi_comm = MPI.COMM_WORLD
-            # mpi_rank = mpi_comm.Get_rank()
-                
-            # if not isinstance(mus, RemoteObject):
-            #     mus = self.pool.scatter_list(mus)
-
-            U_temp = self.pool.apply(_parallel_mpi_solve, mus, fom=self.fom)
-            U_temp = U_temp[0]
-            U = self.fom.solution_space.empty()
-            for i in range(len(U_temp)):
-                U.append(U_temp[i])
-        else:
-            # U = np.empty(len(mus), dtype=np.object)
-            # with RemoteObjectManager() as reobma:
-            #with self.logger.block(f'Computing solution snapshots for current batch in parallel ...'):
-            def _parallel_solve(mu, fom=None, evaluations=None):
-                U = fom.solve(mu)
-                evaluations.append(U)
-
-            U = self.fom.solution_space.empty()
-            self.pool.map(_parallel_solve, mus, fom=self.fom, evaluations=U)
         add = 0
         stopped = True
         #for i in range(len(mus)):
@@ -472,18 +454,7 @@ def _rb_surrogate_evaluate(rom=None, fom=None, reductor=None, mus=None, error_no
     else:
         max_err_ind = np.argmax(errors)
         return errors[max_err_ind], mus[max_err_ind]
-    
-def _parallel_mpi_solve(mus, fom=None):
-    # from mpi4py import MPI
 
-    mpi_comm = MPI.COMM_WORLD
-    mpi_rank = mpi_comm.Get_rank()
 
-    # U_onrank = fom.solution_space.empty()
-    # for mu in mus:
-    #     U_onrank.append(fom.solve(mu))
-    mu = mus[mpi_rank]
-    U_onrank = fom.solve(mu)
-    # U = fom.solution_space.empty()
-    U = mpi_comm.gather(U_onrank, root=0)
-    return U
+def _parallel_solve(mu, fom=None):
+    return fom.solve(mu)
