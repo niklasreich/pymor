@@ -398,7 +398,7 @@ class RBSurrogate(WeakGreedySurrogate):
 
     def extend_parallel(self, mus):
 
-        Us = self.pool.map(_parallel_solve, mus, fom=self.fom)
+        Us = self.pool.map(_parallel_solve, mus, fom=self.remote_fom)
         U, Us = Us[0], Us[1:]
         for UU in Us:
             U.append(UU, remove_from_other=True)
