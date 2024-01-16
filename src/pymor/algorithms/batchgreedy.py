@@ -77,13 +77,8 @@ def weak_batch_greedy(surrogate, training_set, atol=None, rtol=None, max_extensi
                 'time': time.perf_counter() - tic}
 
     # parallel_batch = False
-    allow_mpi = False
     if pool is None:
         pool = dummy_pool
-    elif pool is not dummy_pool:
-        logger.info(f'Using pool of {len(pool)} workers for parallel greedy search.')
-        if isinstance(pool, MPIPool):
-            allow_mpi = True
     # Always use parallel extension of basis by batch
     parallel_batch = True
 
@@ -183,7 +178,7 @@ def weak_batch_greedy(surrogate, training_set, atol=None, rtol=None, max_extensi
         stopped = True
         if parallel_batch:
             with logger.block(f'Extending in parallel...'):
-                add, stopped = surrogate.extend_parallel(this_i_mus, allow_mpi=allow_mpi)
+                add, stopped = surrogate.extend_parallel(this_i_mus)
                 extensions += add
         else:
             for i in range(batchsize):
@@ -277,7 +272,7 @@ class WeakGreedySurrogate(BasicObject):
         pass
 
     @abstractmethod
-    def extend_parallel(self, mus, allow_mpi=False):
+    def extend_parallel(self, mus):
         pass
 
 
@@ -401,7 +396,7 @@ class RBSurrogate(WeakGreedySurrogate):
             self.rom = self.reductor.reduce()
 
 
-    def extend_parallel(self, mus, allow_mpi=False):
+    def extend_parallel(self, mus):
 
         Us = self.pool.map(_parallel_solve, mus, fom=self.fom)
         U, Us = Us[0], Us[1:]
