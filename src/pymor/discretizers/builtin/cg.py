@@ -961,8 +961,7 @@ class NonlinearReactionOperator(Operator):
     def apply(self, U, mu = None):
         U = U.to_numpy().ravel()
         q, w = self.grid.reference_element.quadrature(order=2)
-        # SF = LagrangeShapeFunctions[self.grid.reference_element][1]
-        SF = LagrangeShapeFunctions[triangle][1] # HOTFIX!
+        SF = LagrangeShapeFunctions[self.grid.reference_element][1]
         SF = np.array(tuple(f(q) for f in SF))
         C = self.reaction_coefficient(self.grid.centers(0), mu=mu)
         subentities = self.grid.subentities(0, self.grid.dim)
@@ -994,8 +993,7 @@ class NonlinearReactionOperator(Operator):
     def jacobian(self, U, mu = None):
         U = U.to_numpy().ravel()
         q, w = self.grid.reference_element.quadrature(order=2)
-        # SF = LagrangeShapeFunctions[self.grid.reference_element][1]
-        SF = LagrangeShapeFunctions[triangle][1] # HOTFIX!
+        SF = LagrangeShapeFunctions[self.grid.reference_element][1]
         SF = np.array(tuple(f(q) for f in SF))
         C = self.reaction_coefficient(self.grid.centers(0), mu=mu)
         subentities = self.grid.subentities(0, self.grid.dim)
@@ -1023,7 +1021,7 @@ class NonlinearReactionOperator(Operator):
         A = csc_matrix(A).copy()
 
         return NumpyMatrixOperator(A, source_id = self.source.id, range_id = self.range.id)
-    
+
     def restricted(self, dofs):
         source_faces = np.setdiff1d(self.grid.neighbours(2, 0)[dofs].ravel(),
                                    np.array([-1], dtype=np.int32),
@@ -1176,7 +1174,7 @@ def discretize_stationary_cg(analytical_problem, diameter=None, domain_discretiz
     # nonlinear reaction part
     if p.nonlinear_reaction is not None:
         Li += [NonlinearReactionOperator(grid, boundary_info, reaction_coefficient = p.nonlinear_reaction_coefficient,
-                                         reaction_function = p.nonlinear_reaction, reaction_function_derivative = p.nonlinear_reaction_derivative, 
+                                         reaction_function = p.nonlinear_reaction, reaction_function_derivative = p.nonlinear_reaction_derivative,
                                          name = 'nonlinear_reaction')]
         coefficients += [1.]
 
