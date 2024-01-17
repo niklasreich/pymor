@@ -1023,7 +1023,7 @@ class NonlinearReactionOperator(Operator):
         return NumpyMatrixOperator(A, source_id = self.source.id, range_id = self.range.id)
 
     def restricted(self, dofs):
-        source_faces = np.setdiff1d(self.grid.neighbours(2, 0)[dofs].ravel(),
+        source_faces = np.setdiff1d(self.grid.neighbors(2, 0)[dofs].ravel(),
                                    np.array([-1], dtype=np.int32),
                                    assume_unique=True)
         sub_grid = SubGrid(self.grid, source_faces)
