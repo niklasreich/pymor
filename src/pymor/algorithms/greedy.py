@@ -253,20 +253,43 @@ class RBSurrogate(WeakGreedySurrogate):
             return errs[max_err_ind], max_err_mus[max_err_ind]
 
     def extend(self, mu):
-        with self.logger.block(f'Computing solution snapshot for mu = {mu} ...'):
-            U = self.fom.solve(mu)
-        with self.logger.block('Extending basis with solution snapshot ...'):
-            extension_params = self.extension_params
-            if len(U) > 1:
-                if extension_params is None:
-                    extension_params = {'method': 'pod'}
-                else:
-                    extension_params.setdefault('method', 'pod')
-            self.reductor.extend_basis(U, copy_U=False, **(extension_params or {}))
-            if not self.use_error_estimator:
-                self.remote_reductor = self.pool.push(self.reductor)
+        mus = mu if isinstance(mu, list) else [mu]
+        if len(mus) == 1:
+            msg = f'Computing solution snapshot for mu = {mus[0]} ...'
+        else:
+            msg = f'Computing solution snapshots for mu = {", ".join(str(mu) for mu in mus)} ...'
+        with self.logger.block(msg):
+            Us = self.pool.map(_rb_surrogate_solve, mus, fom=self.remote_fom)
+
+        successful_extensions = 0
+        for U in Us:
+            with self.logger.block('Extending basis with solution snapshot ...'):
+                extension_params = self.extension_params
+                if len(U) > 1:
+                    if extension_params is None:
+                        extension_params = {'method': 'pod'}
+                    else:
+                        extension_params.setdefault('method', 'pod')
+                try:
+                    self.reductor.extend_basis(U, copy_U=False, **(extension_params or {}))
+                    successful_extensions += 1
+                except ExtensionError:
+                    self.logger.info('Extension failed.')
+
+        if not successful_extensions:
+            self.logger.info('All extensions failed.')
+            raise ExtensionError
+
+        if not self.use_error_estimator:
+            self.remote_reductor = self.pool.push(self.reductor)
         with self.logger.block('Reducing ...'):
             self.rom = self.reductor.reduce()
+
+        return successful_extensions
+
+
+def _rb_surrogate_solve(mu, fom=None):
+    return fom.solve(mu)
 
 
 def _rb_surrogate_evaluate(rom=None, fom=None, reductor=None, mus=None, error_norm=None, return_all_values=False):

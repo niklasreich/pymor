@@ -7,6 +7,7 @@ import time
 import numpy as np
 import multiprocessing as mp
 
+from pymor.algorithms.greedy import RBSurrogate
 from pymor.core.base import BasicObject, abstractmethod
 from pymor.core.exceptions import ExtensionError
 from pymor.core.logger import getLogger
@@ -247,34 +248,6 @@ def weak_batch_greedy(surrogate, training_set, atol=None, rtol=None, max_extensi
             'time': tictoc, 'max_errs_pp': max_errs_pp}
 
 
-class WeakGreedySurrogate(BasicObject):
-    """Surrogate for the approximation error in :func:`weak_greedy`."""
-
-    @abstractmethod
-    def evaluate(self, mus, return_all_values=False):
-        """Evaluate the surrogate for given parameters.
-
-        Parameters
-        ----------
-        mus
-            List of parameters for which to estimate the approximation
-            error. When parallelization is used, `mus` can be a |RemoteObject|.
-        return_all_values
-            See below.
-
-        Returns
-        -------
-        If `return_all_values` is `True`, an |array| of the estimated errors.
-        If `return_all_values` is `False`, the maximum estimated error as first
-        return value and the corresponding parameter as second return value.
-        """
-        pass
-
-    @abstractmethod
-    def extend(self, mu):
-        pass
-
-
 def rb_batch_greedy(fom, reductor, training_set, use_error_estimator=True, error_norm=None,
                     atol=None, rtol=None, max_extensions=None, extension_params=None, pool=None,
                     batchsize=None, greedy_start=None, postprocessing=False):
@@ -339,103 +312,3 @@ def rb_batch_greedy(fom, reductor, training_set, use_error_estimator=True, error
     result['rom'] = surrogate.rom
 
     return result
-
-
-class RBSurrogate(WeakGreedySurrogate):
-    """Surrogate for the :func:`weak_greedy` error used in :func:`rb_greedy`.
-
-    Not intended to be used directly.
-    """
-
-    def __init__(self, fom, reductor, use_error_estimator, error_norm, extension_params, pool):
-        self.__auto_init(locals())
-        if use_error_estimator:
-            self.remote_fom, self.remote_error_norm, self.remote_reductor = None, None, None
-        else:
-            self.remote_fom, self.remote_error_norm, self.remote_reductor = \
-                pool.push(fom), pool.push(error_norm), pool.push(reductor)
-        self.rom = None
-
-    def evaluate(self, mus, return_all_values=False):
-        if self.rom is None:
-            with self.logger.block('Reducing ...'):
-                self.rom = self.reductor.reduce()
-
-        if not isinstance(mus, RemoteObject):
-            mus = self.pool.scatter_list(mus)
-
-        result = self.pool.apply(_rb_surrogate_evaluate,
-                                 rom=self.rom,
-                                 fom=self.remote_fom,
-                                 reductor=self.remote_reductor,
-                                 mus=mus,
-                                 error_norm=self.remote_error_norm,
-                                 return_all_values=return_all_values)
-        if return_all_values:
-            return np.hstack(result)
-        else:
-            errs, max_err_mus = list(zip(*result))
-            max_err_ind = np.argmax(errs)
-            return errs[max_err_ind], max_err_mus[max_err_ind]
-
-    def extend(self, mu):
-        mus = mu if isinstance(mu, list) else [mu]
-        if len(mus) == 1:
-            msg = f'Computing solution snapshot for mu = {mus[0]} ...'
-        else:
-            msg = f'Computing solution snapshots for mu = {", ".join(str(mu) for mu in mus)} ...'
-        with self.logger.block(msg):
-            Us = self.pool.map(_parallel_solve, mus, fom=self.remote_fom)
-
-        successful_extensions = 0
-        for U in Us:
-            with self.logger.block('Extending basis with solution snapshot ...'):
-                extension_params = self.extension_params
-                if len(U) > 1:
-                    if extension_params is None:
-                        extension_params = {'method': 'pod'}
-                    else:
-                        extension_params.setdefault('method', 'pod')
-                try:
-                    self.reductor.extend_basis(U, copy_U=False, **(extension_params or {}))
-                    successful_extensions += 1
-                except ExtensionError:
-                    self.logger.info('Extension failed.')
-
-        if not successful_extensions:
-            self.logger.info('All extensions failed.')
-            raise ExtensionError
-
-        if not self.use_error_estimator:
-            self.remote_reductor = self.pool.push(self.reductor)
-        with self.logger.block('Reducing ...'):
-            self.rom = self.reductor.reduce()
-
-        return successful_extensions
-
-
-def _rb_surrogate_evaluate(rom=None, fom=None, reductor=None, mus=None, error_norm=None, return_all_values=False):
-    if not mus:
-        if return_all_values:
-            return []
-        else:
-            return -1., None
-
-    if fom is None:
-        errors = [rom.estimate_error(mu) for mu in mus]
-    elif error_norm is not None:
-        errors = [error_norm(fom.solve(mu) - reductor.reconstruct(rom.solve(mu))) for mu in mus]
-    else:
-        errors = [(fom.solve(mu) - reductor.reconstruct(rom.solve(mu))).norm() for mu in mus]
-    # most error_norms will return an array of length 1 instead of a number,
-    # so we extract the numbers if necessary
-    errors = [x[0] if hasattr(x, '__len__') else x for x in errors]
-    if return_all_values:
-        return errors
-    else:
-        max_err_ind = np.argmax(errors)
-        return errors[max_err_ind], mus[max_err_ind]
-
-
-def _parallel_solve(mu, fom=None):
-    return fom.solve(mu)
